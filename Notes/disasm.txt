@@ -1,0 +1,14 @@
+
+Each instruction contains:
+- A disassembly descriptor
+ > Name, params, format
+- Microcode list
+ > List of microcode operations (with a few params)
+
+
+Microcode:
+- All microcode ops contain these functions
+ > Print
+ > RunForwards (input is previous state, output is next state)
+ > RunBackwards (input is next state, output is previous state)
+

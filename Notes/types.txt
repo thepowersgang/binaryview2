@@ -1,0 +1,15 @@
+Support pointers to types
+Compound types made from primitives and other compounds
+
+
+Typefile contains list of:
+
+"""
+STRUCT name
+int_ptr **i32
+raw_int i16
+raw_i8s [2]i8
+fcnptr *fn(i32) i32
+END
+"""
+

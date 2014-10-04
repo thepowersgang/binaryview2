@@ -1,0 +1,15 @@
+STRUCT MapHeader "#{labelIdx}"
+  layout	*MapLayout
+  eventData	*MapEventData
+  scripts	*void
+  connections	*void
+  musicIdx	u16
+  mapPtrIdx	u16
+  labelIdx	u8
+  unkFlash	u8
+  weather	u8
+  type  	u8
+  _unk  	u16
+  showLabelOnEntry u8
+  battleType	u8
+END

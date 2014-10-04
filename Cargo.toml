@@ -1,0 +1,5 @@
+[package]
+
+name = "BinaryView2"
+version = "0.0.1"
+authors = ["John Hodge <tpg@mutabah.net>"]
