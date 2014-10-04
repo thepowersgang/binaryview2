@@ -3,7 +3,7 @@
 //
 use std::rc::Rc;
 use self::state::State;
-use sortedlist::{SortedList,VecInsertPos};
+use sortedlist::SortedList;	// Allows treating of collection types as sorted lists
 
 pub mod cpus;
 mod state;
@@ -28,7 +28,7 @@ enum InstrParam
 struct InstructionClass
 {
 	is_terminal: bool,
-	print: fn(&mut ::std::fmt::Formatter, &[InstrParam]),
+	print: fn(&mut ::std::fmt::Formatter, &[InstrParam]) -> Result<(),::std::fmt::FormatError>,
 }
 
 trait CPU
@@ -42,7 +42,7 @@ trait CPU
 	fn prep_state(&self, &mut state::State, u64, uint);
 }
 
-struct Disassembled<'a>
+pub struct Disassembled<'a>
 {
 	memory: &'a ::memory::MemoryState,
 	cpu: &'a CPU+'a,
@@ -51,12 +51,22 @@ struct Disassembled<'a>
 
 impl<'a> Disassembled<'a>
 {
-	fn is_done(&self, addr: u64) -> bool
+	pub fn new<'s>(mem: &'s ::memory::MemoryState, cpu: &'s CPU) -> Disassembled<'s>
 	{
-		false
+		Disassembled {
+			memory: mem,
+			cpu: cpu,
+			instructions: Vec::new(),
+		}
 	}
 	
-	fn convert_from(&mut self, mut addr: u64, mode: uint)
+	pub fn convert_queue(&mut self) -> uint
+	{
+		// TODO: 
+		0
+	}
+	
+	pub fn convert_from(&mut self, mut addr: u64, mode: uint)
 	{
 		let mut pos = self.instructions.find_ins(|e| e.base.cmp(&addr));
 		if !pos.is_end() && pos.next().contains(addr)
@@ -112,6 +122,16 @@ impl Instruction
 	}
 	fn is_terminal(&self) -> bool {
 		(*self.class).is_terminal
+	}
+}
+
+impl ::std::fmt::Show for Instruction
+{
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
+	{
+		try!( write!(f, "[{:8x}]+{:u} ", self.base, self.len) );
+		try!( ((*self.class).print)(f, self.params.as_slice()) );
+		Ok( () )
 	}
 }
 

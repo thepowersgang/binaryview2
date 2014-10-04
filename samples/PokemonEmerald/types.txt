@@ -13,3 +13,12 @@ STRUCT MapHeader "#{labelIdx}"
   showLabelOnEntry u8
   battleType	u8
 END
+
+STRUCT MapLayout "{width}x{height}"
+  width	    u32
+  height    u32
+  borderPtr *[4]Tile
+  mapTiles  *[]Tile
+  globalTileset *Tileset
+  localTileset  *Tileset
+ENDSTRUCT

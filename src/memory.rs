@@ -37,6 +37,13 @@ impl Region
 
 impl MemoryState
 {
+	pub fn load(path: &str) -> MemoryState {
+		MemoryState {
+			endian_big: false,
+			regions: Vec::new(),
+		}
+	}
+	
 	fn get_region(&self, addr: u64) -> Option<(&Region,uint)> {
 		match self.regions.as_slice().binary_search(|r| r.start.cmp(&addr))
 		{
