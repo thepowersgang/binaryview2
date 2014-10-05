@@ -16,8 +16,16 @@ pub fn get_tok(lex: &mut lexer::Lexer) -> Result<lexer::Token,String>
 	lex.get_token().map_err(|e|format!("Lex Error: {}", e))
 }
 
-pub fn parse_memorymap(memory: &mut ::memory::MemoryState, typemap: &::types::TypeMap, infiles: &mut MutableMap<String,::std::io::File>, path: &str) -> Result<(),String>
+pub fn parse_memorymap(
+	memory: &mut ::memory::MemoryState,
+	//symbols: &mut ::symbols::Symbols,
+	typemap: &::types::TypeMap,
+	infiles: &mut MutableMap<String,::std::io::File>,
+	path: &str
+	)
+	-> Result<(Vec<(u64,uint)>,),String>
 {
+	let mut entrypoints = Vec::new();
 	let fp = ::std::io::File::open(&::std::path::Path::new(path)).unwrap();
 	let mut reader = UTF8Reader::new(fp);
 	let mut lex = lexer::Lexer::new( &mut reader );
@@ -62,6 +70,7 @@ pub fn parse_memorymap(memory: &mut ::memory::MemoryState, typemap: &::types::Ty
 				let mode = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
 				assert_token!( lexer::TokNewline = try!(get_tok(&mut lex)) );
 				debug!("Add entrypoint {:#x} mode={}", addr, mode);
+				entrypoints.push( (addr, mode as uint) );
 				},
 			"METHOD" => {
 				let addr = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
@@ -123,7 +132,7 @@ pub fn parse_memorymap(memory: &mut ::memory::MemoryState, typemap: &::types::Ty
 	//  > Symbol Table
 	//  > Override list
 	
-	Ok( () )
+	Ok( (entrypoints,) )
 }
 
 pub fn parse_typemap(typemap: &mut ::types::TypeMap, path: &str) -> Result<(),String>

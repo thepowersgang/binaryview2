@@ -56,11 +56,12 @@ fn main()
 		tmp
 		};
 	// - Load memory map (includes overrides)
-	let mut memory = {
-		let mut tmp = memory::MemoryState::new();
-		::parse::parse_memorymap(&mut tmp, &typemap, &mut infiles, mapfile.as_slice()).unwrap();
-		tmp
-		};
+	let mut memory = memory::MemoryState::new();
+	let (entrypoints,) = ::parse::parse_memorymap(
+		&mut memory,
+		&typemap, &mut infiles,
+		mapfile.as_slice()
+		).unwrap();
 	// - Run disassembler
 	let cpu = match disasm::cpus::pick("arm")
 		{
@@ -68,8 +69,10 @@ fn main()
 		None => fail!("Unknown CPU type"),
 		};
 	let mut disasm = disasm::Disassembled::new(&memory, cpu);
-	disasm.convert_from(0, 0);	// HACK: Address 0, mode 0
-	disasm.convert_from(0x08000000, 0);	// HACK: Address 0, mode 0
+	for &(addr,mode) in entrypoints.iter()
+	{
+		disasm.convert_from(addr, mode);
+	}
 	//  Loop until no change in state happens, or a maximum iteration count is hit
 	for _ in range(0, MAX_LOOPS)
 	{

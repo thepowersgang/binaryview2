@@ -68,6 +68,7 @@ impl MemoryState
 			});
 	}
 	
+	/// Load fixed memory from a file
 	pub fn add_rom(&mut self, base: u64, size: uint, file: &mut ::std::io::File)
 	{
 		// The ROM repeats as many times as nessesary to reach the stated size
