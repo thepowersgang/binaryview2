@@ -32,7 +32,6 @@ fn main()
 		Ok(v) => v,
 		Err(reason) => fail!(reason.to_string()),
 		};
-	
 	let typesfile = args.opt_str("types").unwrap_or( String::from_str("types.txt") );
 	let mapfile = args.opt_str("memmap").unwrap_or( String::from_str("memorymap.txt") );
 	let mut infiles: std::collections::HashMap<String,::std::io::File> = args.free.iter().map(|p| {
@@ -49,6 +48,9 @@ fn main()
 		(String::from_str(ident), file)
 		}).collect();
 	
+	// ------------------------------------------------------------
+	// Load program state
+	// ------------------------------------------------------------
 	// - Load type list
 	let typemap = {
 		let mut tmp = types::TypeMap::new();
@@ -62,22 +64,31 @@ fn main()
 		&typemap, &mut infiles,
 		mapfile.as_slice()
 		).unwrap();
-	// - Run disassembler
+	// - Select CPU
+	// TODO: Obtain CPU type from memory map
 	let cpu = match disasm::cpus::pick("arm")
 		{
 		Some(x) => x,
 		None => fail!("Unknown CPU type"),
 		};
+	// ------------------------------------------------------------
+	// Run disassembler
+	// ------------------------------------------------------------
+	// > Iterate entrypoints, running conversion (and obtaining further addresses to process)
 	let mut disasm = disasm::Disassembled::new(&memory, cpu);
 	for &(addr,mode) in entrypoints.iter()
 	{
 		disasm.convert_from(addr, mode);
 	}
-	//  Loop until no change in state happens, or a maximum iteration count is hit
+	// > Loop until no change in state happens, or a maximum iteration count is hit
 	for _ in range(0, MAX_LOOPS)
 	{
 		let mut cont = false;
+		// - Convert the current queue of "to-process" addresses (jump and call targets)
 		cont |= disasm.convert_queue() > 0;
+		// - Apply block and method determining
+		// - Determine value ranges
+		// - Rescan for new addresses to process
 		if !cont {
 			break;
 		}
