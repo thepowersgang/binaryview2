@@ -27,18 +27,40 @@ fn main()
 		getopts::optopt("m", "memmap", "Set memory map filename", "FILE"),
 		getopts::optopt("t", "types", "Set type list filename", "FILE"),
 		];
-	let args = match getopts::getopts(::std::os::args().as_slice(), opts)
+	let args = match getopts::getopts(::std::os::args().slice_from(1), opts)
 		{
 		Ok(v) => v,
 		Err(reason) => fail!(reason.to_string()),
 		};
+	
 	let typesfile = args.opt_str("types").unwrap_or( String::from_str("types.txt") );
 	let mapfile = args.opt_str("memmap").unwrap_or( String::from_str("memorymap.txt") );
+	let mut infiles: std::collections::HashMap<String,::std::io::File> = args.free.iter().map(|p| {
+		let mut s = p.as_slice().split('=');
+		let ident = s.next().unwrap();
+		let path = match s.next() {
+			Some(x) => x,
+			None => fail!("ERROR: Free arguments should be of the form '<name>=<path>', got '{}'", p),
+			};
+		let file = match ::std::io::File::open(&::std::path::Path::new(path)) {
+			Ok(x) => x,
+			Err(e) => fail!("ERROR: Unable to open file '{}' for reading. Reason: {}", path, e)
+			};
+		(String::from_str(ident), file)
+		}).collect();
+	
 	// - Load type list
-	let typemap = types::TypeMap::load(typesfile.as_slice());
-	// - Load memory map (with files)
-	let mut memory = memory::MemoryState::new();
-	::parse::parse_memorymap(&mut memory, mapfile.as_slice()).unwrap();
+	let typemap = {
+		let mut tmp = types::TypeMap::new();
+		::parse::parse_typemap(&mut tmp, typesfile.as_slice()).unwrap();
+		tmp
+		};
+	// - Load memory map (includes overrides)
+	let mut memory = {
+		let mut tmp = memory::MemoryState::new();
+		::parse::parse_memorymap(&mut tmp, &typemap, &mut infiles, mapfile.as_slice()).unwrap();
+		tmp
+		};
 	// - Run disassembler
 	let cpu = match disasm::cpus::pick("arm")
 		{
@@ -47,6 +69,7 @@ fn main()
 		};
 	let mut disasm = disasm::Disassembled::new(&memory, cpu);
 	disasm.convert_from(0, 0);	// HACK: Address 0, mode 0
+	disasm.convert_from(0x08000000, 0);	// HACK: Address 0, mode 0
 	//  Loop until no change in state happens, or a maximum iteration count is hit
 	for _ in range(0, MAX_LOOPS)
 	{

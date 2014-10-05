@@ -15,6 +15,8 @@ pub enum Token
 	TokEof,
 	TokNewline,
 	TokStar,
+	TokColon,
+	TokComma,
 	TokParenOpen,	TokParenClose,
 	TokSquareOpen,	TokSquareClose,
 	TokBraceOpen,	TokBraceClose,
@@ -117,6 +119,34 @@ impl<'a> Lexer<'a>
 		}
 		return Ok(name);
 	}
+	// Read a double-quoted string
+	// - NOTE: has no EOF processing, as an EOF in a double-quoted string is invalid
+	fn read_string(&mut self) -> LexResult<String>
+	{
+		let mut ret = String::new();
+		loop
+		{
+			let ch = try!(self.getc());
+			if ch == '\"' {
+				break;
+			}
+			if ch == '\\' {
+				let codechar = try!(self.getc());
+				match codechar {
+				'\\' => ret.push('\\'),
+				'"' => ret.push('"'),
+				'n' => ret.push('\n'),
+				'r' => ret.push('\r'),
+				'\n' => (),
+				_ => fail!("Unexpected escape code in string '\\{}'", codechar)
+				}
+			}
+			else {
+				ret.push( ch );
+			}
+		}
+		return Ok(ret);
+	}
 	fn read_number(&mut self, base: uint) -> LexResult<u64>
 	{
 		let mut val = 0;
@@ -153,9 +183,13 @@ impl<'a> Lexer<'a>
 		'\0' => TokEof,
 		'\n' => TokNewline,
 		'#' => TokLineComment( try!(self.read_to_eol()) ),
+		'"' => TokString( try!(self.read_string()) ),
 		'{' => TokBraceOpen,	'}' => TokBraceClose,
 		'[' => TokSquareOpen,	']' => TokSquareClose,
 		'(' => TokParenOpen,	')' => TokParenClose,
+		'*' => TokStar,
+		':' => TokColon,
+		',' => TokComma,
 		'0' => TokInteger( {
 			let ch2 = try!(self.getc());
 			match ch2 {
