@@ -14,7 +14,7 @@ ENTRY	0x08000000 0	# ROM Entrypoint (ARM mode)
 # Known annotations
 #
 # - Methods
-METHOD 0x08000000 start() : void
+METHOD 0x08000000 start() void
 # - Globals
 STATIC 0x083e0524 MapLayout_Petalburg	MapLayout
 # - Annotation Overrides

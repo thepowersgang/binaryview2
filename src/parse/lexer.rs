@@ -9,7 +9,8 @@ extern crate libc;
 
 use std::io::IoResult;
 
-enum Token
+#[deriving(Show)]
+pub enum Token
 {
 	TokEof,
 	TokNewline,
@@ -30,6 +31,7 @@ pub struct Lexer<'r>
 {
 	instream: &'r mut Iterator<IoResult<char>>+'r,
 	lastc: Option<char>,
+	saved_tok: Option<Token>,
 }
 
 impl<'a> Lexer<'a>
@@ -38,7 +40,30 @@ impl<'a> Lexer<'a>
 		Lexer {
 			instream: instream,
 			lastc: None,
+			saved_tok: None,
 		}
+	}
+	
+	pub fn get_token(&mut self) -> LexResult<Token>
+	{
+		match self.saved_tok.take()
+		{
+		None => loop
+			{
+				match try!(self.gettoken_int())
+				{
+				TokLineComment(_) => continue,
+				tok @ _ => return Ok(tok),
+				}
+			},
+		Some(tok) => {
+			Ok(tok)
+			}
+		}
+	}
+	pub fn put_back(&mut self, tok: Token)
+	{
+		self.saved_tok = Some(tok);
 	}
 
 	fn getc(&mut self) -> LexResult<char>
@@ -61,6 +86,22 @@ impl<'a> Lexer<'a>
 		self.lastc = Some(c);
 	}
 
+	// Read and return the rest of the line
+	// - Eof is converted to return value
+	fn read_to_eol(&mut self) -> LexResult<String>
+	{
+		let mut ret = String::new();
+		loop
+		{
+			let ch = try!(self.getc());
+			if ch == '\n' || ch == '\0' {
+				self.ungetc(ch);
+				break;
+			}
+			ret.push( ch );
+		}
+		return Ok(ret);
+	}
 	// Read and return a sequence of "identifier" characters
 	fn read_ident(&mut self) -> LexResult<String>
 	{
@@ -72,7 +113,7 @@ impl<'a> Lexer<'a>
 				self.ungetc(ch);
 				break;
 			}
-			name.push_char( ch );
+			name.push( ch );
 		}
 		return Ok(name);
 	}
@@ -100,7 +141,7 @@ impl<'a> Lexer<'a>
 	{
 		loop {
                         let ch = try!(self.getc());
-                        if ch != '\0' && !isspace(ch) {
+                        if ch == '\n' || ch == '\0' || !isspace(ch) {
 				self.ungetc(ch);
                                 break;
                         }
@@ -110,6 +151,8 @@ impl<'a> Lexer<'a>
 		let ret = match ch
 		{
 		'\0' => TokEof,
+		'\n' => TokNewline,
+		'#' => TokLineComment( try!(self.read_to_eol()) ),
 		'{' => TokBraceOpen,	'}' => TokBraceClose,
 		'[' => TokSquareOpen,	']' => TokSquareClose,
 		'(' => TokParenOpen,	')' => TokParenClose,
@@ -138,10 +181,12 @@ impl<'a> Lexer<'a>
 			TokIdent( ident )
 			},
 		_ => {
-			error!("Bad character #{} hit", ch as u32);
+			error!("Bad character #{} '{}' hit", ch as u32, ch);
 			return Err( () )
 			}
 		};
+		
+		debug!("Token = {}", ret);
 		
 		return Ok( ret );
 	}

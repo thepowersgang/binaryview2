@@ -9,14 +9,16 @@ pub struct TypeMap
 	structs: HashMap<String,Struct>
 }
 
-enum InnerType
+#[deriving(Show)]
+pub enum InnerType
 {
 	TypeInt(u8),
 	TypeStruct(String),
 	TypeString(String),
 }
 
-enum Type
+#[deriving(Show)]
+pub enum Type
 {
 	TypeLit(InnerType),
 	TypePointer(u8,InnerType),
