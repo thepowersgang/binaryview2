@@ -37,7 +37,7 @@ impl Region
 
 impl MemoryState
 {
-	pub fn load(path: &str) -> MemoryState {
+	pub fn new() -> MemoryState {
 		MemoryState {
 			endian_big: false,
 			regions: Vec::new(),

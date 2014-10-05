@@ -7,6 +7,8 @@
 #[phase(plugin,link)] extern crate log;
 extern crate getopts;
 
+use utf8reader::UTF8Reader;
+
 mod sortedlist;	// Trait - Provides a sorted list interface to generic types
 
 mod value;	// Value type
@@ -14,6 +16,8 @@ mod memory;	// Memory
 mod types;	// Type manager
 mod disasm;	// Disassembler
 //mod analyse;	// Analysis of the disassembled code (to produce more addresses, and get functions)
+mod lexer;
+mod utf8reader;
 
 static MAX_LOOPS: uint = 16;	// Maximum number of passes during disassembly+processing
 
@@ -34,7 +38,17 @@ fn main()
 	// - Load type list
 	let typemap = types::TypeMap::load(typesfile.as_slice());
 	// - Load memory map (with files)
-	let memory = memory::MemoryState::load(mapfile.as_slice());
+	let mut memory = memory::MemoryState::new();
+	{
+		let fp = std::io::File::open(&std::path::Path::new(mapfile.as_slice())).unwrap();
+		let mut reader = UTF8Reader::new(fp);
+		let lex = lexer::Lexer::new( &mut reader );
+	}
+	//  > Memory mapped items
+	//memory.add_ram(0x02000000, 0x40000);
+	//  > Entrypoints
+	//  > Symbol Table
+	//  > Override list
 	// - Run disassembler
 	let cpu = match disasm::cpus::pick("arm")
 		{
