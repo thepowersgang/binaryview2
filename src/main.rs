@@ -34,6 +34,7 @@ fn main()
 		};
 	let typesfile = args.opt_str("types").unwrap_or( String::from_str("types.txt") );
 	let mapfile = args.opt_str("memmap").unwrap_or( String::from_str("memorymap.txt") );
+	// - Open input files
 	let mut infiles: std::collections::HashMap<String,::std::io::File> = args.free.iter().map(|p| {
 		let mut s = p.as_slice().split('=');
 		let ident = s.next().unwrap();

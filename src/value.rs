@@ -18,6 +18,12 @@ pub enum Value<T: Int>
 	// TODO: Support multi-state, e.g. Unknown or a set of possible values
 }
 
+struct ValuePossibilities<'a,T:Int+'static>
+{
+	val: &'a Value<T>,
+	idx: uint,
+}
+
 impl<T: Int> Value<T>
 {
 	pub fn unknown() -> Value<T>
@@ -39,6 +45,64 @@ impl<T: Int> Value<T>
 			}
 		_ => ValueUnknown,
 		}
+	}
+	
+	pub fn is_fixed_set(&self) -> bool
+	{
+		match self
+		{
+		&ValueUnknown => false,
+		&ValueKnown(_) => true,
+		}
+	}
+	
+	pub fn possibilities<'s>(&'s self) -> ValuePossibilities<'s,T>
+	{
+		ValuePossibilities {
+			val: self,
+			idx: 0,
+		}
+	}
+}
+
+impl<T: Int> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
+{
+	fn add(&self, other: &Value<T>) -> Value<T>
+	{
+		match (self, other)
+		{
+		(&ValueUnknown,_) => ValueUnknown,
+		(_,&ValueUnknown) => ValueUnknown,
+		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a+b),
+		}
+	}
+}
+
+impl<T: Int+::std::fmt::LowerHex> ::std::fmt::Show for Value<T>
+{
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
+	{
+		match self
+		{
+		&ValueUnknown => write!(f, "?"),
+		&ValueKnown(v) => write!(f, "{:#x}", v),
+		}
+	}
+}
+
+impl<'a,T: Int> Iterator<T> for ValuePossibilities<'a,T>
+{
+	fn next(&mut self) -> Option<T>
+	{
+		let rv = match self.val
+			{
+			&ValueUnknown => fail!("Can't get possibilities for an unknown value"),
+			&ValueKnown(v) => {
+				if self.idx == 0 { Some(v) } else { None }
+				},
+			};
+		self.idx += 1;
+		rv
 	}
 }
 

@@ -25,6 +25,12 @@ pub struct MemoryState
 	regions: Vec<Region>,
 }
 
+pub trait MemoryStateAccess<T:Int>
+{
+	fn read(&self, addr: u64) -> Value<T>;
+	fn write(&self, addr: u64, val: Value<T>);
+}
+
 impl Region
 {
 	pub fn read_u8(&self, ofs: uint) -> Value<u8> {
@@ -33,6 +39,20 @@ impl Region
 		RegionROM(ref data) => Value::fixed(data[ofs % self.size]),	// ROMs wrap
 		RegionRAM(ref data) => data[ofs].clone(),
 		RegionMMIO(_) => Value::unknown(),
+		}
+	}
+	
+	/// Compare, treating inside as equal
+	fn cmp_inner(&self, addr: u64) -> Ordering
+	{
+		if addr < self.start {
+			Greater
+		}
+		else if addr >= self.start + self.size as u64 {
+			Less
+		}
+		else {
+			Equal
 		}
 	}
 }
@@ -97,8 +117,10 @@ impl MemoryState
 		debug!("Add MMIO {:#x}+{:#x} \"{}\"", base, size, class);
 	}
 	
+	
+	/// Get the region corresponding to a given address
 	fn get_region(&self, addr: u64) -> Option<(&Region,uint)> {
-		match self.regions.as_slice().binary_search(|r| r.start.cmp(&addr))
+		match self.regions.as_slice().binary_search(|r| r.cmp_inner(addr))
 		{
 		Found(idx) => {
 			let r = &self.regions[idx];
@@ -117,11 +139,13 @@ impl MemoryState
 	pub fn read_u8(&self, addr: u64) -> Option<Value<u8>> {
 		self.get_region(addr).map(|(a,ofs)| a.read_u8(ofs))
 	}
+	/// Read two bytes (from the same region)
 	pub fn read_u16(&self, addr: u64) -> Option<Value<u16>> {
 		self.get_region(addr).map(
 			|(a,ofs)| Value::<u16>::concat(a.read_u8(ofs), a.read_u8(ofs+1))
 			)
 	}
+	/// Read four bytes (from the same region)
 	pub fn read_u32(&self, addr: u64) -> Option<Value<u32>> {
 		self.get_region(addr).map(
 			|(a,ofs)|
@@ -130,6 +154,50 @@ impl MemoryState
 					Value::<u16>::concat(a.read_u8(ofs+2), a.read_u8(ofs+3))
 					)
 			)
+	}
+}
+
+impl MemoryStateAccess<u8> for MemoryState
+{
+	fn read(&self, addr: u64) -> Option<Value<u8>>
+	{
+		self.get_region(addr).map(|(a,ofs)| a.read_u8(ofs))
+	}
+	fn write<T>(&self, addr: u64, val: Value<u8>)
+	{
+		fail!("TODO: memory write");
+	}
+}
+
+impl MemoryStateAccess<u16> for MemoryState
+{
+	fn read(&self, addr: u64) -> Option<Value<u16>>
+	{
+		self.get_region(addr).map(
+			|(a,ofs)| Value::<u16>::concat(a.read_u8(ofs), a.read_u8(ofs+1))
+			)
+	}
+	fn write<T>(&self, addr: u64, val: Value<u16>)
+	{
+		fail!("TODO: memory write");
+	}
+}
+
+impl MemoryStateAccess<u32> for MemoryState
+{
+	fn read(&self, addr: u64) -> Option<Value<u32>>
+	{
+		self.get_region(addr).map(
+			|(a,ofs)|
+				Value::concat(
+					Value::<u16>::concat(a.read_u8(ofs+0), a.read_u8(ofs+1)),
+					Value::<u16>::concat(a.read_u8(ofs+2), a.read_u8(ofs+3))
+					)
+			)
+	}
+	fn write<T>(&self, addr: u64, val: Value<u32>)
+	{
+		fail!("TODO: memory write");
 	}
 }
 

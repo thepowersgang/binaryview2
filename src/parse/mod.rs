@@ -16,6 +16,12 @@ pub fn get_tok(lex: &mut lexer::Lexer) -> Result<lexer::Token,String>
 	lex.get_token().map_err(|e|format!("Lex Error: {}", e))
 }
 
+/// Parse a memory map file
+///
+/// \param memory	Memory state, mutated as part of processing
+/// \param typemap	Avaliable custom types
+/// \param infiles	Map of input files (mutable to allow use of the contained File struct)
+/// \param path 	Path to the memory map file
 pub fn parse_memorymap(
 	memory: &mut ::memory::MemoryState,
 	//symbols: &mut ::symbols::Symbols,
