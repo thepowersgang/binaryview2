@@ -29,6 +29,14 @@ enum InstrParam
 	ParamTmpReg(u8),
 	ParamImmediate(u64),
 }
+enum InstrSize
+{
+	InstrSizeNA,
+	InstrSize8,
+	InstrSize16,
+	InstrSize32,
+	InstrSize64,
+}
 
 trait InstructionClass
 {

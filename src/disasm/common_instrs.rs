@@ -106,10 +106,18 @@ impl InstructionClass for IClassLoadOfs
 		let base = state.get(params[1]);
 		let ofs = state.get(params[2]);
 		let addr = base + ofs;
+		let size = ::disasm::InstrSize32;
 		
-		let val: Value<u32> = state.read(addr);
-		let val64: Value<u64> = Value::concat( val, Value::fixed(0) );	// low, high
-		state.set(params[0], val64);
+		// Handle zero-extending the value to 64 bits
+		let val = match size
+			{
+			::disasm::InstrSizeNA => Value::unknown(),
+			::disasm::InstrSize8  => Value::zero_extend::<u8> ( state.read(addr) ),
+			::disasm::InstrSize16 => Value::zero_extend::<u16>( state.read(addr) ),
+			::disasm::InstrSize32 => Value::zero_extend::<u32>( state.read(addr) ),
+			::disasm::InstrSize64 => Value::concat::<u32>( state.read(addr), state.read(addr+Value::fixed(4)) ),
+			};
+		state.set(params[0], val);
 	}
 	fn backwards(&self, state: &mut State, params: &[InstrParam])
 	{

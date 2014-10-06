@@ -34,6 +34,17 @@ impl<T: Int> Value<T>
 	{
 		ValueKnown(val)
 	}
+	pub fn zero_extend<U: Unsigned+Int>(val: Value<U>) -> Value<T>
+	{
+		match val
+		{
+		ValueKnown(v) => {
+			let v_u: T = NumCast::from(v).unwrap();
+			ValueKnown(v_u)
+			},
+		ValueUnknown => ValueUnknown,
+		}
+	}
 	pub fn concat<U: Int>(left: Value<U>, right: Value<U>) -> Value<T>
 	{
 		match (left,right)
