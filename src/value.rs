@@ -57,6 +57,19 @@ impl<T: Int> Value<T>
 		_ => ValueUnknown,
 		}
 	}
+	
+	pub fn truncate<U: Int+Unsigned>(&self) -> Value<U>
+	{
+		match self
+		{
+		&ValueKnown(a) => {
+			let a_u: U = NumCast::from(a).unwrap();
+			ValueKnown(a_u)
+			}
+		&ValueUnknown => ValueUnknown,
+		}
+	}
+	
 	pub fn val_known(&self) -> Option<T>
 	{
 		match self
