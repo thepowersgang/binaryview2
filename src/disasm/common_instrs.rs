@@ -107,8 +107,9 @@ impl InstructionClass for IClassLoadOfs
 		let ofs = state.get(params[2]);
 		let addr = base + ofs;
 		
-		let val = state.read(addr);
-		state.set(params[0], val);
+		let val: Value<u32> = state.read(addr);
+		let val64: Value<u64> = Value::concat( val, Value::fixed(0) );	// low, high
+		state.set(params[0], val64);
 	}
 	fn backwards(&self, state: &mut State, params: &[InstrParam])
 	{

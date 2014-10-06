@@ -25,10 +25,10 @@ pub struct MemoryState
 	regions: Vec<Region>,
 }
 
-pub trait MemoryStateAccess<T:Int>
+pub trait MemoryStateAccess
 {
-	fn read(&self, addr: u64) -> Value<T>;
-	fn write(&self, addr: u64, val: Value<T>);
+	fn read(&MemoryState, addr: u64) -> Value<Self>;
+	fn write(&mut MemoryState, addr: u64, val: Value<Self>);
 }
 
 impl Region
@@ -157,47 +157,39 @@ impl MemoryState
 	}
 }
 
-impl MemoryStateAccess<u8> for MemoryState
+impl MemoryStateAccess for u8
 {
-	fn read(&self, addr: u64) -> Option<Value<u8>>
+	fn read(mem: &MemoryState, addr: u64) -> Value<u8>
 	{
-		self.get_region(addr).map(|(a,ofs)| a.read_u8(ofs))
+		mem.read_u8(addr).unwrap_or(Value::unknown())
 	}
-	fn write<T>(&self, addr: u64, val: Value<u8>)
+	fn write(mem: &mut MemoryState, addr: u64, val: Value<u8>)
 	{
-		fail!("TODO: memory write");
+		unimplemented!();
 	}
 }
 
-impl MemoryStateAccess<u16> for MemoryState
+impl MemoryStateAccess for u16
 {
-	fn read(&self, addr: u64) -> Option<Value<u16>>
+	fn read(mem: &MemoryState, addr: u64) -> Value<u16>
 	{
-		self.get_region(addr).map(
-			|(a,ofs)| Value::<u16>::concat(a.read_u8(ofs), a.read_u8(ofs+1))
-			)
+		mem.read_u16(addr).unwrap_or(Value::unknown())
 	}
-	fn write<T>(&self, addr: u64, val: Value<u16>)
+	fn write(mem: &mut MemoryState, addr: u64, val: Value<u16>)
 	{
-		fail!("TODO: memory write");
+		unimplemented!();
 	}
 }
 
-impl MemoryStateAccess<u32> for MemoryState
+impl MemoryStateAccess for u32
 {
-	fn read(&self, addr: u64) -> Option<Value<u32>>
+	fn read(mem: &MemoryState, addr: u64) -> Value<u32>
 	{
-		self.get_region(addr).map(
-			|(a,ofs)|
-				Value::concat(
-					Value::<u16>::concat(a.read_u8(ofs+0), a.read_u8(ofs+1)),
-					Value::<u16>::concat(a.read_u8(ofs+2), a.read_u8(ofs+3))
-					)
-			)
+		mem.read_u32(addr).unwrap_or(Value::unknown())
 	}
-	fn write<T>(&self, addr: u64, val: Value<u32>)
+	fn write(mem: &mut MemoryState, addr: u64, val: Value<u32>)
 	{
-		fail!("TODO: memory write");
+		unimplemented!();
 	}
 }
 

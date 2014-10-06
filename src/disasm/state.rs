@@ -69,23 +69,24 @@ impl<'mem> State<'mem>
 		}
 	}
 	
-	pub fn read<T:Int+::std::fmt::LowerHex>(&mut self, addr: Value<u64>) -> Value<T>
+	pub fn read<T:Int+MemoryStateAccess+::std::fmt::LowerHex>(&mut self, addr: Value<u64>) -> Value<T>
 	{
-		debug!("read({})", addr);
-		if addr.is_known()
-		{
-			self.memory.read(addr.known())
-		}
-		else if addr.is_fixed_set()
-		{
-			fail!("TODO: Support generating set of data from read");
-			Value::unknown()
-		}
-		else
-		{
-			// Unknown address = unknown data
-			Value::unknown()
-		}
+		let ret = if let Some(addr_val) = addr.val_known()
+			{
+				MemoryStateAccess::read(self.memory, addr_val)
+			}
+			else if addr.is_fixed_set()
+			{
+				fail!("TODO: Support generating set of data from read");
+				Value::<T>::unknown()
+			}
+			else
+			{
+				// Unknown address = unknown data
+				Value::<T>::unknown()
+			};
+		debug!("read({}) = {}", addr, ret);
+		ret
 	}
 	pub fn write<T:Int+::std::fmt::LowerHex>(&mut self, addr: Value<u64>, val: Value<T>)
 	{

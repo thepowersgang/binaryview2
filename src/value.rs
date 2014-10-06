@@ -46,6 +46,14 @@ impl<T: Int> Value<T>
 		_ => ValueUnknown,
 		}
 	}
+	pub fn val_known(&self) -> Option<T>
+	{
+		match self
+		{
+		&ValueKnown(v) => Some(v),
+		_ => None,
+		}
+	}
 	
 	pub fn is_fixed_set(&self) -> bool
 	{

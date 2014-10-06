@@ -4,6 +4,7 @@
 #![feature(associated_types)]
 #![feature(phase)]
 #![feature(macro_rules)]
+#![feature(if_let)]
 
 #[phase(plugin,link)] extern crate log;
 extern crate getopts;
