@@ -36,10 +36,16 @@ impl Region
 	pub fn read_u8(&self, ofs: uint) -> Value<u8> {
 		match self.data
 		{
-		RegionROM(ref data) => Value::fixed(data[ofs % self.size]),	// ROMs wrap
+		RegionROM(ref data) => Value::known(data[ofs % self.size]),	// ROMs wrap
 		RegionRAM(ref data) => data[ofs].clone(),
 		RegionMMIO(_) => Value::unknown(),
 		}
+	}
+	pub fn read_u16(&self, ofs: uint) -> Value<u16> {
+		Value::concat(self.read_u8(ofs+0), self.read_u8(ofs+1))
+	}
+	pub fn read_u32(&self, ofs: uint) -> Value<u32> {
+		Value::concat(self.read_u16(ofs+0), self.read_u16(ofs+2))
 	}
 	
 	/// Compare, treating inside as equal
@@ -137,22 +143,21 @@ impl MemoryState
 		}
 	}
 	pub fn read_u8(&self, addr: u64) -> Option<Value<u8>> {
-		self.get_region(addr).map(|(a,ofs)| a.read_u8(ofs))
+		self.get_region(addr).map( |(a,ofs)| a.read_u8(ofs) )
 	}
 	/// Read two bytes (from the same region)
 	pub fn read_u16(&self, addr: u64) -> Option<Value<u16>> {
-		self.get_region(addr).map(
-			|(a,ofs)| Value::<u16>::concat(a.read_u8(ofs), a.read_u8(ofs+1))
-			)
+		self.get_region(addr).map( |(a,ofs)| a.read_u16(ofs) )
 	}
 	/// Read four bytes (from the same region)
 	pub fn read_u32(&self, addr: u64) -> Option<Value<u32>> {
+		self.get_region(addr).map( |(a,ofs)| a.read_u32(ofs) )
+	}
+	/// Read eight bytes (from the same region)
+	pub fn read_u64(&self, addr: u64) -> Option<Value<u64>> {
 		self.get_region(addr).map(
 			|(a,ofs)|
-				Value::concat(
-					Value::<u16>::concat(a.read_u8(ofs+0), a.read_u8(ofs+1)),
-					Value::<u16>::concat(a.read_u8(ofs+2), a.read_u8(ofs+3))
-					)
+				Value::concat( a.read_u32(ofs+0), a.read_u32(ofs+4) )
 			)
 	}
 }
@@ -188,6 +193,18 @@ impl MemoryStateAccess for u32
 		mem.read_u32(addr).unwrap_or(Value::unknown())
 	}
 	fn write(mem: &mut MemoryState, addr: u64, val: Value<u32>)
+	{
+		unimplemented!();
+	}
+}
+
+impl MemoryStateAccess for u64
+{
+	fn read(mem: &MemoryState, addr: u64) -> Value<u64>
+	{
+		mem.read_u64(addr).unwrap_or(Value::unknown())
+	}
+	fn write(mem: &mut MemoryState, addr: u64, val: Value<u64>)
 	{
 		unimplemented!();
 	}

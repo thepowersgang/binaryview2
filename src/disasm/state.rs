@@ -59,7 +59,7 @@ impl<'mem> State<'mem>
 			self.tmpregs[r as uint]
 			},
 		::disasm::ParamImmediate(v) => {
-			Value::fixed(v)
+			Value::known(v)
 			},
 		}
 	}
@@ -82,7 +82,7 @@ impl<'mem> State<'mem>
 	}
 	
 	/// Read from emulated memory
-	pub fn read<T:Int+MemoryStateAccess+::std::fmt::LowerHex>(&mut self, addr: Value<u64>) -> Value<T>
+	pub fn read<T:Int+Unsigned+MemoryStateAccess+::std::fmt::LowerHex>(&mut self, addr: Value<u64>) -> Value<T>
 	{
 		let ret = if let Some(addr_val) = addr.val_known()
 			{
@@ -102,7 +102,7 @@ impl<'mem> State<'mem>
 		ret
 	}
 	/// Write to emulated memory
-	pub fn write<T:Int+::std::fmt::LowerHex>(&mut self, addr: Value<u64>, val: Value<T>)
+	pub fn write<T:Int+Unsigned+MemoryStateAccess+::std::fmt::LowerHex>(&mut self, addr: Value<u64>, val: Value<T>)
 	{
 		debug!("write({} <= {})", addr, val);
 	}

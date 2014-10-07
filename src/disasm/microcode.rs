@@ -48,7 +48,7 @@ impl UCodeOp for UCodeLoad
 			::disasm::InstrSize32 => Value::zero_extend::<u32>( state.read(addr) ),
 			::disasm::InstrSize64 => Value::concat::<u32>(
 				state.read(addr),
-				state.read(addr+Value::fixed(4))
+				state.read(addr+Value::known(4))
 				),
 			};
 		state.set(params[0], val);

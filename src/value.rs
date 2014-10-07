@@ -30,7 +30,7 @@ impl<T: Int> Value<T>
 	{
 		ValueUnknown
 	}
-	pub fn fixed(val: T) -> Value<T>
+	pub fn known(val: T) -> Value<T>
 	{
 		ValueKnown(val)
 	}
@@ -54,10 +54,11 @@ impl<T: Int> Value<T>
 			let b_u: T = NumCast::from(b).unwrap();
 			ValueKnown(a_u | b_u << (4*::std::mem::size_of::<T>()))
 			}
-		_ => ValueUnknown,
+		_ => ValueUnknown,	// TODO: Handle mask+value (or similar)
 		}
 	}
 	
+	/// Truncate (or zero-extend) a value into another size
 	pub fn truncate<U: Int+Unsigned>(&self) -> Value<U>
 	{
 		match self
@@ -70,6 +71,7 @@ impl<T: Int> Value<T>
 		}
 	}
 	
+	/// Returns Some(val) if the value is fixed
 	pub fn val_known(&self) -> Option<T>
 	{
 		match self
@@ -88,6 +90,7 @@ impl<T: Int> Value<T>
 		}
 	}
 	
+	/// Get an iterator of possible concrete values for this value
 	pub fn possibilities<'s>(&'s self) -> ValuePossibilities<'s,T>
 	{
 		ValuePossibilities {
@@ -97,7 +100,8 @@ impl<T: Int> Value<T>
 	}
 }
 
-impl<T: Int> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
+/// Add two values
+impl<T: Int+Unsigned> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
 {
 	fn add(&self, other: &Value<T>) -> Value<T>
 	{
@@ -110,7 +114,7 @@ impl<T: Int> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
 	}
 }
 
-impl<T: Int+::std::fmt::LowerHex> ::std::fmt::Show for Value<T>
+impl<T: Int+Unsigned+::std::fmt::LowerHex> ::std::fmt::Show for Value<T>
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
 	{
@@ -122,7 +126,7 @@ impl<T: Int+::std::fmt::LowerHex> ::std::fmt::Show for Value<T>
 	}
 }
 
-impl<'a,T: Int> Iterator<T> for ValuePossibilities<'a,T>
+impl<'a,T: Int+Unsigned> Iterator<T> for ValuePossibilities<'a,T>
 {
 	fn next(&mut self) -> Option<T>
 	{

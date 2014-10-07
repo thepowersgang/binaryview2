@@ -31,7 +31,7 @@ impl ::disasm::CPU for ArmCpu
 			1 => addr + 4 + 1,	// THUMB mode
 			_ => fail!("Invalid ARM mode"),
 			};
-		state.set( ::disasm::ParamTrueReg(15), Value::fixed(pc_val) );
+		state.set( ::disasm::ParamTrueReg(15), Value::known(pc_val) );
 	}
 	
 	fn disassemble(&self, mem: &::memory::MemoryState, addr: u64, mode: uint) -> Result<::disasm::Instruction,()>
