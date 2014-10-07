@@ -1,6 +1,7 @@
 //
 //
 //
+#![macro_escape]
 use disasm::InstructionClass;
 use disasm::{InstrParam,ParamTmpReg};
 use disasm::InstrSizeNA;
@@ -9,28 +10,56 @@ use disasm::microcode::UCodeOp;
 use disasm::state::State;
 use value::Value;
 
-struct IClassJump;
+macro_rules! def_instr{
+	($name:ident, $class:ident, ($fmt:ident, $params:ident, $state:ident) => {$isterm:block; $print:block;$forwards:block;$backwards:block;} )
+	=> {
+	struct $class;
+	pub static $name: $class = $class;
+	impl ::disasm::InstructionClass for $class
+	{
+		fn name(&self) -> &str { stringify!($name) }
+		fn is_terminal(&self, $params: &[InstrParam]) -> bool { $isterm }
+		fn print(&self, $fmt: &mut ::std::fmt::Formatter, $params: &[InstrParam]) -> Result<(),::std::fmt::FormatError> {
+			$print
+		}
+		fn forwards(&self, $state: &mut State, $params: &[InstrParam]) {
+			$forwards
+		}
+		fn backwards(&self, $state: &mut State, $params: &[InstrParam]) {
+			$backwards
+		}
+	}
+	}
+}
+
 struct IClassCall;
 struct IClassMove;
+struct IClassShl;
 struct IClassAdd;
 struct IClassLoadOfs;
 struct IClassStoreOfs;
 
-pub static JUMP: IClassJump = IClassJump;
 pub static CALL: IClassCall = IClassCall;
 pub static MOVE: IClassMove = IClassMove;
+pub static SHL: IClassShl = IClassShl;
 pub static ADD: IClassAdd = IClassAdd;
 pub static LOAD_OFS: IClassLoadOfs = IClassLoadOfs;
 pub static STORE_OFS: IClassStoreOfs = IClassStoreOfs;
 
+def_instr!(JUMP, IClassJump, (f,p,state) => {
+	{ true };
+	{ write!(f, "{}", p[0]) };
+	{ microcode::JUMP.forwards(state, InstrSizeNA, p.slice(0,1)); } ;
+	{ } ;
+})
+
+/*
+struct IClassJump;
+pub static JUMP: IClassJump = IClassJump;
 impl InstructionClass for IClassJump
 {
-	fn name(&self) -> &str {
-		"JUMP"
-	}
-	fn is_terminal(&self, _: &[InstrParam]) -> bool {
-		true
-	}
+	fn name(&self) -> &str { "JUMP" }
+	fn is_terminal(&self, _: &[InstrParam]) -> bool { true }
 	fn print(&self, f: &mut ::std::fmt::Formatter, p: &[InstrParam]) -> Result<(),::std::fmt::FormatError>
 	{
 		write!(f, "{}", p[0])
@@ -43,6 +72,7 @@ impl InstructionClass for IClassJump
 	{
 	}
 }
+*/
 
 impl InstructionClass for IClassCall
 {
@@ -87,6 +117,22 @@ impl InstructionClass for IClassMove
 		let val = state.get(params[0]);
 		state.set(params[0], Value::unknown());
 		state.set(params[1], val);
+	}
+}
+
+impl InstructionClass for IClassShl
+{
+	fn name(&self) -> &str { "SHL" }
+	fn is_terminal(&self, _: &[InstrParam]) -> bool { false }
+	fn print(&self, f: &mut ::std::fmt::Formatter, p: &[InstrParam]) -> Result<(),::std::fmt::FormatError>
+	{
+		unimplemented!();
+	}
+	fn forwards(&self, state: &mut State, params: &[InstrParam]) {
+		unimplemented!();
+	}
+	fn backwards(&self, state: &mut State, params: &[InstrParam]) {
+		unimplemented!();
 	}
 }
 

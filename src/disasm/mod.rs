@@ -5,10 +5,10 @@ use std::rc::Rc;
 use self::state::State;
 use sortedlist::SortedList;	// Allows treating of collection types as sorted lists
 
-pub mod cpus;
 mod common_instrs;
 mod state;
 mod microcode;
+pub mod cpus;
 
 struct Instruction
 {

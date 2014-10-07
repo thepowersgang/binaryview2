@@ -76,14 +76,37 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::I
 			&instrs::SET_SREG,
 			vec![
 				ParamImmediate( SRegCPSR as u64 ),
-				ParamTrueReg( (word&0xF) as u8 ),
+				reg(word, 0),
 				ParamImmediate( match (word>>20)&3 { 0=>0,1=>0,2=>0,_=>0 } ),
 				]
 			)
 		},
+	// Branch+Exchange Register
+	0x121 => Instruction::new( 4, ccode, &instrs::BX, vec![ reg(word, 0) ] ),
+	// Branch+Link+Exchange
+	0x123 => Instruction::new( 4, ccode, &instrs::BLX, vec![ reg(word, 0) ] ),
+	// Logical-Shift-Left (and Reg/Reg Move)
+	0x1A0 => {
+		let amt = (word >> 7) & 31;
+		if amt == 0 {
+			Instruction::new( 4, ccode, &common_instrs::MOVE, vec![
+				reg(word,12), reg(word,0)
+				] )
+		}
+		else {
+			Instruction::new( 4, ccode, &common_instrs::SHL, vec![
+				reg(word,12), reg(word,0), ParamImmediate(amt as u64)
+				] )
+		}
+		},
+	// Logical-Shift-Left
+	0x1A1 => Instruction::new( 4, ccode, &common_instrs::SHL, vec![
+			reg(word,12), reg(word,0), reg(word,8)
+			]
+		),
+	// Add (Register, Immediate)
 	0x280 ... 0x28F => Instruction::new( 4, ccode, &common_instrs::ADD, vec![
-		ParamTrueReg( ((word>>12)&0xF) as u8 ),
-		ParamTrueReg( ((word>>16)&0xF) as u8 ),
+		reg(word, 12), reg(word, 16),
 		ParamImmediate( expand_imm_arm(word & 0xFFF) ),
 		]
 		),
@@ -128,9 +151,7 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::I
 			4,
 			ccode,
 			&common_instrs::JUMP as &InstructionClass,
-			vec![
-				ParamImmediate(addr + 8 + sign_extend(24, word & 0xFFFFFF) * 4),
-				]
+			vec![ ParamImmediate(addr + 8 + sign_extend(24, word & 0xFFFFFF) * 4), ]
 			)
 		},
 	0xB00 ... 0xBFF => {
@@ -139,9 +160,7 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::I
 			4,
 			ccode,
 			&common_instrs::CALL as &InstructionClass,
-			vec![
-				ParamImmediate(addr + 8 + sign_extend(24, word & 0xFFFFFF) * 4),
-				]
+			vec![ ParamImmediate(addr + 8 + sign_extend(24, word & 0xFFFFFF) * 4), ]
 			)
 		},
 	_ => {
@@ -192,35 +211,55 @@ fn expand_imm_arm(imm12: u32) -> u64
 	((val_ur >> count) | (val_ur << (32 - count))) as u64
 }
 
+fn reg(word: u32, ofs: uint) -> InstrParam
+{
+	ParamTrueReg( ((word >> ofs) & 15) as u8 )
+}
+
 mod instrs
 {
 	use disasm::state::State;
 	use disasm::{InstructionClass,InstrParam};
 
-	struct InstrSetSReg;
-	
-	pub static SET_SREG: InstrSetSReg = InstrSetSReg;
-
-	impl InstructionClass for InstrSetSReg
-	{
-		fn name(&self) -> &str { "MOV" }
-		fn is_terminal(&self, _: &[InstrParam]) -> bool { false }
-		fn print(&self, f: &mut ::std::fmt::Formatter, p: &[InstrParam]) -> Result<(),::std::fmt::FormatError>
+	// Set system register
+	def_instr!(SET_SREG, InstrSetSReg, (f,p,state) => {
+		{ false };
+		{ write!(f, "SR{} {} {}", p[0], p[1], p[2]) };
 		{
-			write!(f, "SR{} {} {}", p[0], p[1], p[2])
-		}
-		fn forwards(&self, state: &mut State, params: &[InstrParam])
-		{
-			let regid = match params[0] {
+			let regid = match p[0] {
 				::disasm::ParamImmediate(v) => v,
-				_ => fail!("Invalid type for param[0] of SET_SREG, {}", params[0]),
+				_ => fail!("Invalid type for param[0] of SET_SREG, {}", p[0]),
 				};
-			let val = state.get(params[1]);
-		}
-		fn backwards(&self, state: &mut State, params: &[InstrParam])
+			let val = state.get(p[1]);
+		};
 		{
-		}
-	}
+			unimplemented!();
+		};
+	})
+	
+	// Branch+Exchange
+	def_instr!(BX, InstrBX, (f,p,state) => {
+		{ true };
+		{ write!(f, "{}", p[0]) };
+		{
+			unimplemented!();
+		};
+		{
+			fail!("Can't reverse BX");
+		};
+	})
+	
+	// Branch+Link+Exchange
+	def_instr!(BLX, InstrBLX, (f,p,state) => {
+		{ true };
+		{ write!(f, "{}", p[0]) };
+		{
+			unimplemented!();
+		};
+		{
+			unimplemented!();
+		};
+	})
 }
 
 // vim: ft=rust
