@@ -8,7 +8,7 @@
 // for RAM.
 
 /// A dynamic value (range determined during execution)
-#[deriving(Clone)]
+#[deriving(Clone,PartialEq)]
 pub enum Value<T: Int>
 {
 	ValueUnknown,
@@ -113,6 +113,42 @@ impl<T: Int+Unsigned> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
 		}
 	}
 }
+/// Bitwise AND
+impl<T: Int+Unsigned> ::std::ops::BitAnd<Value<T>,Value<T>> for Value<T>
+{
+	fn bitand(&self, other: &Value<T>) -> Value<T>
+	{
+		// TODO: Restrict range of unknown
+		match (self, other)
+		{
+		(&ValueUnknown,_) => ValueUnknown,
+		(_,&ValueUnknown) => ValueUnknown,
+		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a&b),
+		}
+	}
+}
+
+impl<T: Int+Unsigned> ::std::cmp::PartialOrd for Value<T>
+{
+	fn partial_cmp(&self, other: &Value<T>) -> Option<Ordering>
+	{
+		match (self,other)
+		{
+		(&ValueUnknown,_) => None,
+		(_,&ValueUnknown) => None,
+		(&ValueKnown(a),&ValueKnown(b)) => a.partial_cmp(&b),
+		}
+	}
+}
+//impl<T: Int+Unsigned> ::std::cmp::PartialEq for Value<T>
+//{
+//	fn eq(&self, other: &Value<T>) -> Value<T>
+//	{
+//		match (self,other)
+//		{
+//		}
+//	}
+//}
 
 impl<T: Int+Unsigned+::std::fmt::LowerHex> ::std::fmt::Show for Value<T>
 {

@@ -108,13 +108,14 @@ impl<'mem> State<'mem>
 	}
 
 	/// Add an address to be processed	
-	pub fn add_target(&mut self, val: Value<u64>)
+	pub fn add_target(&mut self, val: Value<u64>, mode: uint)
 	{
+		debug!("add_target({}, mode={})", val, mode);
 		if val.is_fixed_set()
 		{
 			for i in val.possibilities()
 			{
-				self.todo_list.push( (i,0) );
+				self.todo_list.push( (i,mode) );
 			}
 		}
 	}

@@ -218,6 +218,7 @@ fn reg(word: u32, ofs: uint) -> InstrParam
 
 mod instrs
 {
+	use value::Value;
 	use disasm::state::State;
 	use disasm::{InstructionClass,InstrParam};
 
@@ -242,7 +243,15 @@ mod instrs
 		{ true };
 		{ write!(f, "{}", p[0]) };
 		{
-			unimplemented!();
+			let addr = state.get(p[0]);
+			if addr & Value::known(1) == Value::known(1)
+			{
+				state.add_target(addr & Value::known(!1), 1)
+			}
+			else
+			{
+				state.add_target(addr & Value::known(!1), 0)
+			}
 		};
 		{
 			fail!("Can't reverse BX");

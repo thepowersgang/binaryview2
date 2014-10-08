@@ -25,7 +25,7 @@ impl UCodeOp for UCodeJump
 	fn forwards(&self, state: &mut State, size: InstrSize, params: &[InstrParam])
 	{
 		let target = state.get( params[0] );
-		state.add_target( target );
+		state.add_target( target, 0 );	// TODO: Get mode from state
 		// TODO: Clear or otherwise munge the state, since jump doesn't continue
 	}
 	fn backwards(&self, state: &mut State, size: InstrSize, params: &[InstrParam])
