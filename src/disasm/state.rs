@@ -84,6 +84,9 @@ impl<'mem> State<'mem>
 	/// Read from emulated memory
 	pub fn read<T:Int+Unsigned+MemoryStateAccess+::std::fmt::LowerHex>(&mut self, addr: Value<u64>) -> Value<T>
 	{
+		// TODO: Tag unknown values such that accesses to an unknown base can be tracked
+		// > Tag with origin of unknown? Probably
+		// > Tagging will allow types of object fields to be tracked
 		let ret = if let Some(addr_val) = addr.val_known()
 			{
 				MemoryStateAccess::read(self.memory, addr_val)
@@ -105,6 +108,11 @@ impl<'mem> State<'mem>
 	pub fn write<T:Int+Unsigned+MemoryStateAccess+::std::fmt::LowerHex>(&mut self, addr: Value<u64>, val: Value<T>)
 	{
 		debug!("write({} <= {})", addr, val);
+		error!("TODO: Support write access to simulated memory");
+		// Requirements:
+		// - Store locally a set of changes applied by this state
+		//  > Read should query this first.
+		// - This list is accessed by disasm code and applied to main memory as a value set once state is destroyed
 	}
 
 	/// Add an address to be processed	
