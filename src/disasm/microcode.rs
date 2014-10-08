@@ -11,32 +11,35 @@ pub trait UCodeOp
 	fn backwards(&self, state: &mut State, size: InstrSize, params: &[InstrParam]);
 }
 
-struct UCodeJump;
-//struct UCodeCall;
-struct UCodeLoad;
-struct UCodeStore;
+macro_rules! def_ucode{
+	($name:ident, $class:ident, ($st:ident, $sz:ident, $p:ident) => {$fwd:block; $back:block;})
+	=> {
+		struct $class;
+		pub static $name: $class = $class;
+		impl UCodeOp for $class
+		{
+			fn forwards(&self, $st: &mut State, $sz: InstrSize, $p: &[InstrParam])  $fwd
+			fn backwards(&self, $st: &mut State, $sz: InstrSize, $p: &[InstrParam]) $back
+		}
+	};
+}
 
-pub static JUMP: UCodeJump = UCodeJump;
-pub static LOAD: UCodeLoad = UCodeLoad;
-pub static STORE: UCodeStore = UCodeStore;
-
-impl UCodeOp for UCodeJump
-{
-	fn forwards(&self, state: &mut State, size: InstrSize, params: &[InstrParam])
+def_ucode!(JUMP, UCodeJump, (state, size, params) => {
 	{
 		let target = state.get( params[0] );
 		state.add_target( target, 0 );	// TODO: Get mode from state
-		// TODO: Clear or otherwise munge the state, since jump doesn't continue
-	}
-	fn backwards(&self, state: &mut State, size: InstrSize, params: &[InstrParam])
+	};
 	{
 		fail!("Running a jump backwards is impossible");
-	}
-}
+	};
+})
 
-impl UCodeOp for UCodeLoad
-{
-	fn forwards(&self, state: &mut State, size: InstrSize, params: &[InstrParam])
+def_ucode!(CALL, UCodeCall, (state, size, params) => {
+	{ unimplemented!(); };
+	{ unimplemented!(); };
+})
+
+def_ucode!(LOAD, UCodeLoad, (state, size, params) => {
 	{
 		let addr = state.get(params[1]);
 		// Handle zero-extending the value to 64 bits
@@ -52,8 +55,7 @@ impl UCodeOp for UCodeLoad
 				),
 			};
 		state.set(params[0], val);
-	}
-	fn backwards(&self, state: &mut State, size: InstrSize, params: &[InstrParam])
+	};
 	{
 		if params[0] != params[1]
 		{
@@ -62,12 +64,10 @@ impl UCodeOp for UCodeLoad
 			state.write(addr, val);
 		}
 		state.set(params[0], Value::unknown());
-	}
-}
+	};
+})
 
-impl UCodeOp for UCodeStore
-{
-	fn forwards(&self, state: &mut State, size: InstrSize, params: &[InstrParam])
+def_ucode!(STORE, UCodeStore, (state, size, params) => {
 	{
 		let addr = state.get(params[1]);
 		let val = state.get(params[0]);
@@ -80,8 +80,7 @@ impl UCodeOp for UCodeStore
 		::disasm::InstrSize32 => state.write(addr, val.truncate::<u32>()),
 		::disasm::InstrSize64 => state.write(addr, val.truncate::<u64>()),
 		}
-	}
-	fn backwards(&self, state: &mut State, size: InstrSize, params: &[InstrParam])
+	};
 	{
 		if params[0] != params[1]
 		{
@@ -90,8 +89,23 @@ impl UCodeOp for UCodeStore
 			state.write(addr, val);
 		}
 		state.set(params[0], Value::unknown());
-	}
-}
+	};
+})
+
+// Push - Pretty darn simple due to rust
+def_ucode!(PUSH, UCodePush, (state, size, params) => {
+	{
+		let val = state.get(params[0]);
+		// TODO: Should this code handle the stack pointer manipulation?
+		// - Nah, leave that up to the user
+		state.stack_push( val );
+	};
+	{
+		let val = state.stack_pop();
+		state.set(params[0], val);
+		unimplemented!();
+	};
+})
 
 // vim: ft=rust
 

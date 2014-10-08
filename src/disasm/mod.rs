@@ -216,6 +216,17 @@ impl ::std::fmt::Show for Instruction
 	}
 }
 
+impl InstrParam
+{
+	fn immediate(&self) -> u64
+	{
+		match self
+		{
+		&ParamImmediate(v) => v,
+		_ => fail!("Expected immediate value, got {}", self),
+		}
+	}
+}
 impl ::std::fmt::Show for InstrParam
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>

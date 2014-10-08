@@ -173,7 +173,7 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::I
 /// Disassemble in THUMB mode
 fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::Instruction,()>
 {
-	let val = match mem.read_u16(addr)
+	let word = match mem.read_u16(addr)
 		{
 		Some(ValueKnown(v)) => v,
 		_ => {
@@ -182,13 +182,50 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 			}
 		};
 
-	match val
+	Ok(match word >> 10
 	{
-	_ => {
-		error!("Unknown opcode {:02x}", val);
+	// Move immediate
+	0x08 ... 0x09 => Instruction::new(
+		2, 0xE, &common_instrs::MOVE,
+		vec![ ParamTrueReg(((word>>8)&7) as u8), ParamImmediate( (word & 0xFF) as u64) ]
+		),
+	// 0x11: Special data instructions, branch and exchange
+	0x11 => match (word >> 6) & 0xF
+		{
+		0x9 ... 0xb => {
+			let Rd = (word & 7) | ((word >> 7) & 1) << 3;
+			let Rn = (word >> 3) & 0xF;
+			if Rd == 15 {
+				Instruction::new(2, 0xE, &common_instrs::JUMP, vec![ ParamTrueReg(Rn as u8) ])
+			}
+			else {
+				Instruction::new(2, 0xE, &common_instrs::MOVE, vec![ ParamTrueReg(Rd as u8), ParamTrueReg(Rn as u8) ])
+			}
+			},
+		v @ _ => {
+			error!("Unknown opcode 11:{:x}", v);
+			return Err( () )
+			},
+		},
+	// Misc Instructions
+	0x2D => match (word >> 5) & 0x1F
+		{
+		0x0 ... 0xF => Instruction::new(
+			2, 0xE, &instrs::PUSH_M, vec![
+				// Bitmask. Instr[8] = LR
+				ParamImmediate( (((word >> 8) & 1) << 14 | (word & 0xFF)) as u64),
+				]
+			),
+		v @ _ => {
+			error!("Unknown opcode 2D:{:02x}", v);
+			return Err( () )
+			},
+		},
+	v @ _ => {
+		error!("Unknown opcode {:02x}", v);
 		return Err( () )
 		}
-	}
+	})
 }
 
 // ---
@@ -264,6 +301,34 @@ mod instrs
 		{ write!(f, "{}", p[0]) };
 		{
 			unimplemented!();
+		};
+		{
+			unimplemented!();
+		};
+	})
+	
+	// Push multiple (bitmask)
+	def_instr!(PUSH_M, InstrPushMulti, (f,p,state) => {
+		{ false };
+		{
+			let mask = p[0].immediate();
+			for i in range(0,16) {
+				if mask & 1 << i != 0 {
+					try!(write!(f, "R{} ", i));
+				}
+			}
+			Ok( () )
+		};
+		{
+			let mask = p[0].immediate();
+			debug!("mask={:x}", mask);
+			for i in range(0,16).rev() {
+				if mask & 1 << i != 0 {
+					// TODO: Decrement stack pointer
+					let val = state.get( ::disasm::ParamTrueReg(i as u8) );
+					state.stack_push( val );
+				}
+			}
 		};
 		{
 			unimplemented!();

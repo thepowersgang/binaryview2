@@ -48,20 +48,22 @@ impl<'mem> State<'mem>
 	/// Get the value of a parameter (register)
 	pub fn get(&mut self, param: ::disasm::InstrParam) -> Value<u64>
 	{
-		match param
-		{
-		::disasm::ParamTrueReg(r) => {
-			assert!( (r as uint) < self.registers.len() );
-			self.registers[r as uint]
-			},
-		::disasm::ParamTmpReg(r) => {
-			assert!( (r as uint) < NUM_TMPREGS );
-			self.tmpregs[r as uint]
-			},
-		::disasm::ParamImmediate(v) => {
-			Value::known(v)
-			},
-		}
+		let v = match param
+			{
+			::disasm::ParamTrueReg(r) => {
+				assert!( (r as uint) < self.registers.len() );
+				self.registers[r as uint]
+				},
+			::disasm::ParamTmpReg(r) => {
+				assert!( (r as uint) < NUM_TMPREGS );
+				self.tmpregs[r as uint]
+				},
+			::disasm::ParamImmediate(v) => {
+				Value::known(v)
+				},
+			};
+		debug!("get({}) = {}", param, v);
+		v
 	}
 	/// Set the value of a parameter (register)
 	pub fn set(&mut self, param: ::disasm::InstrParam, val: Value<u64>)
@@ -113,6 +115,16 @@ impl<'mem> State<'mem>
 		// - Store locally a set of changes applied by this state
 		//  > Read should query this first.
 		// - This list is accessed by disasm code and applied to main memory as a value set once state is destroyed
+	}
+
+	pub fn stack_push(&mut self, val: Value<u64>)
+	{
+		error!("TODO: State push value ({})", val); 
+	}
+	pub fn stack_pop(&mut self) -> Value<u64>
+	{
+		error!("TODO: state pop value");
+		Value::unknown()
 	}
 
 	/// Add an address to be processed	
