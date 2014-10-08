@@ -97,6 +97,7 @@ impl<'a> Disassembled<'a>
 		debug!("convert_from(addr={:#x},mode={})", addr, mode);
 		let mut todo = Vec::<(u64,uint)>::new();
 		
+		let mut state = State::null(self.cpu, self.memory);
 		{
 			let mut pos = self.instructions.find_ins(|e| e.base.cmp(&addr));
 			if !pos.is_end() && pos.next().contains(addr)
@@ -129,7 +130,6 @@ impl<'a> Disassembled<'a>
 				debug!("> {}", instr);
 				
 				// Execute with minimal state
-				let mut state = State::null(self.cpu, self.memory);
 				self.cpu.prep_state(&mut state, addr, mode);
 				state.run(&instr);
 				
