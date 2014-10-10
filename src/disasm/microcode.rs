@@ -85,10 +85,13 @@ def_ucode!(STORE, UCodeStore, (state, size, params) => {
 		if params[0] != params[1]
 		{
 			let addr = state.get(params[1]);
-			let val = state.get(params[0]);
-			state.write(addr, val);
+			let val = state.read::<u64>(addr);
+			state.set(params[0], val);
 		}
-		state.set(params[0], Value::unknown());
+		else
+		{
+			//state.set(params[0], Value::unknown());
+		}
 	};
 })
 

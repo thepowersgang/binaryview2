@@ -27,7 +27,7 @@ pub struct MemoryState
 
 pub trait MemoryStateAccess
 {
-	fn read(&MemoryState, addr: u64) -> Value<Self>;
+	fn read(&MemoryState, addr: u64) -> Option<Value<Self>>;
 	fn write(&mut MemoryState, addr: u64, val: Value<Self>);
 }
 
@@ -164,9 +164,9 @@ impl MemoryState
 
 impl MemoryStateAccess for u8
 {
-	fn read(mem: &MemoryState, addr: u64) -> Value<u8>
+	fn read(mem: &MemoryState, addr: u64) -> Option<Value<u8>>
 	{
-		mem.read_u8(addr).unwrap_or(Value::unknown())
+		mem.read_u8(addr)
 	}
 	fn write(mem: &mut MemoryState, addr: u64, val: Value<u8>)
 	{
@@ -176,9 +176,9 @@ impl MemoryStateAccess for u8
 
 impl MemoryStateAccess for u16
 {
-	fn read(mem: &MemoryState, addr: u64) -> Value<u16>
+	fn read(mem: &MemoryState, addr: u64) -> Option<Value<u16>>
 	{
-		mem.read_u16(addr).unwrap_or(Value::unknown())
+		mem.read_u16(addr)
 	}
 	fn write(mem: &mut MemoryState, addr: u64, val: Value<u16>)
 	{
@@ -188,9 +188,9 @@ impl MemoryStateAccess for u16
 
 impl MemoryStateAccess for u32
 {
-	fn read(mem: &MemoryState, addr: u64) -> Value<u32>
+	fn read(mem: &MemoryState, addr: u64) -> Option<Value<u32>>
 	{
-		mem.read_u32(addr).unwrap_or(Value::unknown())
+		mem.read_u32(addr)
 	}
 	fn write(mem: &mut MemoryState, addr: u64, val: Value<u32>)
 	{
@@ -200,9 +200,9 @@ impl MemoryStateAccess for u32
 
 impl MemoryStateAccess for u64
 {
-	fn read(mem: &MemoryState, addr: u64) -> Value<u64>
+	fn read(mem: &MemoryState, addr: u64) -> Option<Value<u64>>
 	{
-		mem.read_u64(addr).unwrap_or(Value::unknown())
+		mem.read_u64(addr)
 	}
 	fn write(mem: &mut MemoryState, addr: u64, val: Value<u64>)
 	{

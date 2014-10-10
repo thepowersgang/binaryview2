@@ -49,18 +49,7 @@ impl ::disasm::CPU for ArmCpu
 /// Disassemble code in ARM mode (32-bits per instruction)
 fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::Instruction,()>
 {
-	let word = match mem.read_u32(addr)
-		{
-		Some(ValueKnown(v)) => v,
-		Some(_) => {
-			error!("Disassembling non-concrete memory");
-			return Err( () );
-			},
-		None => {
-			error!("Disassembling unmapped memory");
-			return Err( () );
-			}
-		};
+	let word = try!(readmem::<u32>(mem, addr));
 
 	let ccode = (word >> 28) as u8;
 	if ccode == 0xF {
@@ -173,33 +162,30 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::I
 /// Disassemble in THUMB mode
 fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::Instruction,()>
 {
-	let word = match mem.read_u16(addr)
-		{
-		Some(ValueKnown(v)) => v,
-		_ => {
-			error!("Disassembling non-concrete memory");
-			return Err( () )	// Reading from non-concrete memory!
-			}
-		};
+	let word = try!(readmem::<u16>(mem, addr));
 
 	Ok(match word >> 10
 	{
 	// Move immediate
 	0x08 ... 0x09 => Instruction::new(
-		2, 0xE, &common_instrs::MOVE,
-		vec![ ParamTrueReg(((word>>8)&7) as u8), ParamImmediate( (word & 0xFF) as u64) ]
+		2, 0xE, &common_instrs::MOVE, vec![
+			ParamTrueReg(((word>>8)&7) as u8), ParamImmediate( (word & 0xFF) as u64)
+			]
 		),
 	// 0x11: Special data instructions, branch and exchange
 	0x11 => match (word >> 6) & 0xF
 		{
+		// Move Register (High)
 		0x9 ... 0xb => {
 			let Rd = (word & 7) | ((word >> 7) & 1) << 3;
 			let Rn = (word >> 3) & 0xF;
 			if Rd == 15 {
-				Instruction::new(2, 0xE, &common_instrs::JUMP, vec![ ParamTrueReg(Rn as u8) ])
+				Instruction::new(2, 0xE, &common_instrs::JUMP,
+					vec![ ParamTrueReg(Rn as u8) ])
 			}
 			else {
-				Instruction::new(2, 0xE, &common_instrs::MOVE, vec![ ParamTrueReg(Rd as u8), ParamTrueReg(Rn as u8) ])
+				Instruction::new(2, 0xE, &common_instrs::MOVE,
+					vec![ ParamTrueReg(Rd as u8), ParamTrueReg(Rn as u8) ])
 			}
 			},
 		v @ _ => {
@@ -221,11 +207,133 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 			return Err( () )
 			},
 		},
+	// 32-bit instructions
+	0x3a ... 0x3f => {
+		let word2 = try!(readmem::<u16>(mem, addr+2));
+		match (word >> 11) & 3
+		{
+		0 => {
+			error!("Thumb 3F:0 Undefined");
+			return Err( () )
+			},
+		1 => {
+			if (word >> 10) & 1 != 0
+			{
+				// Coprocessor
+				error!("TODO: Thumb 3F:1 Coprocessor");
+				return Err( () );
+			}
+			else if (word >> 9) & 1 != 0
+			{
+				// Data Processing (Shifted Reg)
+				error!("TODO: Thumb 3F:1 DPSR");
+				return Err( () );
+			}
+			else if (word >> 6) & 1 != 0
+			{
+				// Load/store dual, load/store excl, table branch
+				error!("TODO: Thumb 3F:1 Load/Store Dual/Excl, Table Branch");
+				return Err( () );
+			}
+			else
+			{
+				// Load/Store Multiple
+				error!("TODO: Thumb 3F:1 Load/Store Multiple");
+				return Err( () );
+			}
+			},
+		2 => {
+			if (word >> 15) & 1 != 0
+			{
+				match (word2 >> 12) & 7
+				{
+				4 ... 7 => { // BL/BLX
+					let flag = (word >> 10) & 1 != 0;
+					// TODO: Check logic of this snippet... I don't trust it
+					let ofs = ((word2 as u32 & 0x7FF) << 1)
+						| (word as u32 & 0x3FF) << 12
+						| if flag {
+							((word2 as u32 >> 11) & 1) << 22
+							| ((word2 as u32 >> 13) & 1) << 23
+							| 1 << 24
+							} else {
+							0
+							}
+						;
+					
+					if (word2>>12) & 1 != 0 {
+						Instruction::new(4, 0xE, &instrs::BLX,
+							vec![ ParamImmediate( addr + 4 + sign_extend(25, ofs) ) ])
+					}
+					else {
+						Instruction::new(4, 0xE, &common_instrs::CALL,
+							vec![ ParamImmediate( addr + 4 + sign_extend(25, ofs) ) ])
+					}
+					},
+				v @ _ => {
+					error!("Unknown 3F:2 Branch/Misc {:x}", v);
+					return Err( () );
+					},
+				}
+			}
+			else if (word >> 9) & 1 != 0
+			{
+				match (word >> 4) & 31
+				{
+				v @ _ => {
+					error!("Unknown 3F:2 Data Binary Imm{:x}", v);
+					return Err( () );
+					},
+				}
+			}
+			else
+			{
+				match (word >> 4) & 31
+				{
+				v @ _ => {
+					error!("Unknown 3F:2 Data Mod Imm{:x}", v);
+					return Err( () );
+					},
+				}
+			}
+			},
+		3 => {
+			if (word >> 10) & 1 != 0
+			{
+				error!("TODO: Thumb Coprocessor (3F:3)");
+				return Err( () );
+			}
+			else
+			{
+				error!("Unknown thumb 32-bit instr (3F:3) {:04x} {:04x}", word, word2);
+				return Err( () );
+			}
+			},
+		_ => fail!("impossible (thumb 3F)"),
+		}
+		},
 	v @ _ => {
 		error!("Unknown opcode {:02x}", v);
 		return Err( () )
 		}
 	})
+}
+
+fn readmem<T: Int+::memory::MemoryStateAccess>(mem: &::memory::MemoryState, addr: u64) -> Result<T,()>
+{
+	use memory::MemoryStateAccess;
+	match MemoryStateAccess::read(mem, addr)
+	{
+	Some(ValueKnown(x)) => Ok(x),
+	Some(_) => {
+		error!("Disassembling non-concrete memory at {:#x}", addr);
+		Err( () )
+		},
+	None => {
+		error!("Disassembling unmapped memory at {:#x}", addr);
+		Err( () )
+		},
+	}
 }
 
 // ---
@@ -291,6 +399,7 @@ mod instrs
 			}
 		};
 		{
+			let _ = p; let _ = state;
 			fail!("Can't reverse BX");
 		};
 	})
@@ -300,9 +409,13 @@ mod instrs
 		{ true };
 		{ write!(f, "{}", p[0]) };
 		{
+			let _ = p;
+			let _ = state;
 			unimplemented!();
 		};
 		{
+			let _ = p;
+			let _ = state;
 			unimplemented!();
 		};
 	})
@@ -331,6 +444,8 @@ mod instrs
 			}
 		};
 		{
+			let _ = p;
+			let _ = state;
 			unimplemented!();
 		};
 	})

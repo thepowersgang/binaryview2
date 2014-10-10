@@ -91,7 +91,14 @@ impl<'mem> State<'mem>
 		// > Tagging will allow types of object fields to be tracked
 		let ret = if let Some(addr_val) = addr.val_known()
 			{
-				MemoryStateAccess::read(self.memory, addr_val)
+				match MemoryStateAccess::read(self.memory, addr_val)
+				{
+				Some(x) => x,
+				None => {
+					warn!("Reading unmapped memory {}", addr_val);
+					Value::unknown()
+					}
+				}
 			}
 			else if addr.is_fixed_set()
 			{

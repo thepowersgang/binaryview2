@@ -20,7 +20,10 @@ macro_rules! def_instr{
 	impl ::disasm::InstructionClass for $class
 	{
 		fn name(&self) -> &str { stringify!($name) }
-		fn is_terminal(&self, $params: &[InstrParam]) -> bool { $isterm }
+		fn is_terminal(&self, $params: &[InstrParam]) -> bool {
+			let _ = $params;
+			$isterm
+		}
 		fn print(&self, $fmt: &mut ::std::fmt::Formatter, $params: &[InstrParam]) -> Result<(),::std::fmt::FormatError> {
 			$print
 		}
