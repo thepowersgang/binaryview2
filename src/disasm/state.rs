@@ -11,10 +11,13 @@ pub struct State<'mem>
 {
 	/// Reference to system memory
 	memory: &'mem ::memory::MemoryState,
-	/// Real registers
+	/// Real registers - Static vector
 	registers: Vec<Value<u64>>,
 	/// Temporary registers
 	tmpregs: [Value<u64>,..NUM_TMPREGS],
+	
+	/// Stack - Dynamic vector
+	stack: Vec<Value<u64>>,
 	
 	/// List of addresses to be processed on next pass
 	todo_list: Vec<(u64, uint)>,
@@ -29,6 +32,7 @@ impl<'mem> State<'mem>
 			memory: mem,
 			registers: Vec::from_fn(cpu.num_regs(), |_| Value::unknown()),
 			tmpregs: [Value::unknown(), ..NUM_TMPREGS],
+			stack: Vec::with_capacity(16),
 			todo_list: Vec::new(),
 		}
 	}
@@ -41,7 +45,7 @@ impl<'mem> State<'mem>
 	/// Execute a single instruction
 	pub fn run(&mut self, instr: &::disasm::Instruction)
 	{
-		instr.class.forwards(self, instr.params.as_slice());
+		instr.class.forwards(self, instr);
 	}
 	
 	/// Get the value of a parameter (register)
@@ -73,6 +77,7 @@ impl<'mem> State<'mem>
 		::disasm::ParamTrueReg(r) => {
 			assert!( (r as uint) < self.registers.len() );
 			(*self.registers.get_mut(r as uint)) = val;
+			//self.registers[r as uint] = val;
 			},
 		::disasm::ParamTmpReg(r) => {
 			assert!( (r as uint) < NUM_TMPREGS );
@@ -125,12 +130,21 @@ impl<'mem> State<'mem>
 
 	pub fn stack_push(&mut self, val: Value<u64>)
 	{
-		error!("TODO: State push value ({})", val); 
+		debug!("stack_push({})", val);
+		self.stack.push(val);
 	}
 	pub fn stack_pop(&mut self) -> Value<u64>
 	{
-		error!("TODO: state pop value");
-		Value::unknown()
+		let rv = self.stack.pop();
+		debug!("stack_pop() = {}", rv);
+		match rv
+		{
+		Some(x) => x,
+		None => {
+			error!("Pop from empty stack");
+			Value::unknown()
+			},
+		}
 	}
 
 	/// Add an address to be processed	
@@ -143,6 +157,35 @@ impl<'mem> State<'mem>
 			{
 				self.todo_list.push( (i,mode) );
 			}
+		}
+	}
+	
+	pub fn call_clobber(&mut self, val: Value<u64>, mode: uint)
+	{
+		if val.is_fixed_set()
+		{
+			//if let Some(f) = state.functions.find( (mode,val
+			//{
+			//}
+			//else
+			//{
+				// Fallback, clobber everything!
+				self.clobber_everything();
+			//}
+		}
+		else
+		{
+			// Fallback, clobber everything!
+			self.clobber_everything();
+		}
+	}
+	
+	/// Clobber every register
+	pub fn clobber_everything(&mut self)
+	{
+		for r in self.registers.mut_iter()
+		{
+			*r = Value::unknown();
 		}
 	}
 }

@@ -44,8 +44,8 @@ trait InstructionClass
 	fn name(&self) -> &str;
 	fn is_terminal(&self, &[InstrParam]) -> bool;
 	fn print(&self, &mut ::std::fmt::Formatter, &[InstrParam]) -> Result<(),::std::fmt::FormatError>;
-	fn forwards(&self, &mut State, &[InstrParam]);
-	fn backwards(&self, &mut State, &[InstrParam]);
+	fn forwards(&self, &mut State, &Instruction);
+	fn backwards(&self, &mut State, &Instruction);
 }
 
 trait CPU
@@ -213,6 +213,13 @@ impl Instruction
 	}
 	fn is_terminal(&self) -> bool {
 		self.condition == 0xE && self.class.is_terminal(self.params.as_slice())
+	}
+
+	fn mode(&self) -> uint {
+		self.mode
+	}	
+	fn params(&self) -> &[InstrParam] {
+		self.params.as_slice()
 	}
 }
 

@@ -20,14 +20,12 @@ pub enum Value<T: Int>
 	// TODO: Support multi-state, e.g. Unknown or a set of possible values
 }
 
-/*
 pub enum ValueBool
 {
 	ValueBoolTrue,
 	ValueBoolFalse,
 	ValueBoolUnknown,
 }
-*/
 
 struct ValuePossibilities<'a,T:Int+'static>
 {
@@ -45,6 +43,12 @@ impl<T: Int+Unsigned+Zero> Value<T>
 	}
 	pub fn zero() -> Value<T> {
 		ValueKnown( Zero::zero() )
+	}
+	pub fn ones() -> Value<T> {
+		let bs = ::std::mem::size_of::<T>() * 8;
+		let top: T = NumCast::from( 1u64 << (bs-1) ).unwrap();
+		let v = top | (!top);
+		ValueKnown( v )
 	}
 	
 	/// Zero-extend a value to this type
@@ -117,6 +121,23 @@ impl<T: Int+Unsigned+Zero> Value<T>
 		ValuePossibilities {
 			val: self,
 			idx: 0,
+		}
+	}
+	
+	pub fn bit(&self, pos: uint) -> ValueBool
+	{
+		let one: T = NumCast::from(1u).unwrap();
+		let mask = one << self.bitsize()-1;
+		match self
+		{
+		&ValueUnknown => ValueBoolUnknown,
+		&ValueKnown(v) =>
+			if v & mask != Zero::zero() {
+				ValueBoolTrue
+			}
+			else {
+				ValueBoolFalse
+			},
 		}
 	}
 }
