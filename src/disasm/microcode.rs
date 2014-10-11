@@ -35,7 +35,12 @@ def_ucode!(JUMP, UCodeJump, (state, size, params) => {
 })
 
 def_ucode!(CALL, UCodeCall, (state, size, params) => {
-	{ unimplemented!(); };
+	{
+		let target = state.get( params[0] );
+		state.add_target( target, 0 );	// TODO: Get mode from state
+		// Clobber all registers
+		warn!("TODO: Clobber registers using calling convention");
+	};
 	{ unimplemented!(); };
 })
 

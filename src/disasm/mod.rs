@@ -17,6 +17,7 @@ struct Instruction
 	len: u8,
 	
 	condition: u8,
+	opsize: InstrSize,
 	class: &'static InstructionClass + 'static,
 	params: Vec<InstrParam>,
 	
@@ -179,6 +180,7 @@ impl Instruction
 	fn new(
 		len: u8,
 		condition: u8,
+		opsize: InstrSize,
 		class: &'static InstructionClass + 'static,
 		params: Vec<InstrParam>
 		) -> Instruction
@@ -188,6 +190,7 @@ impl Instruction
 			base: 0,
 			len: len,
 			condition: condition,
+			opsize: opsize,
 			class: class,
 			params: params,
 			is_target: false,
@@ -210,7 +213,7 @@ impl ::std::fmt::Show for Instruction
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
 	{
-		try!( write!(f, "[{}:{:8x}]+{:u} {} ", self.mode, self.base, self.len, self.class.name()) );
+		try!( write!(f, "[{}:{:8x}]+{:u} {{{}}} {} ", self.mode, self.base, self.len, self.opsize, self.class.name()) );
 		try!( self.class.print(f, self.params.as_slice()) );
 		Ok( () )
 	}
@@ -236,6 +239,21 @@ impl ::std::fmt::Show for InstrParam
 		&ParamTrueReg(r) => write!(f, "R{}", r),
 		&ParamTmpReg(r) => write!(f, "tr#{}", r),
 		&ParamImmediate(v) => write!(f, "{:#x}", v),
+		}
+	}
+}
+
+impl ::std::fmt::Show for InstrSize
+{
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
+	{
+		match self
+		{
+		&InstrSizeNA => write!(f, "NA"),
+		&InstrSize8  => write!(f, " 8"),
+		&InstrSize16 => write!(f, "16"),
+		&InstrSize32 => write!(f, "32"),
+		&InstrSize64 => write!(f, "64"),
 		}
 	}
 }

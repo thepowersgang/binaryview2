@@ -51,7 +51,7 @@ def_instr!(CALL, IClassCall, (f,p,state) => {
 	{ false };
 	{ write!(f, "{}", p[0]) };
 	{
-		//microcode::CALL.forwards(state, params[0..1]);
+		microcode::CALL.forwards(state, InstrSizeNA, p[0..1]);
 	};
 	{
 		fail!("TODO: CALL.backwards");
@@ -77,7 +77,26 @@ def_instr!(MOVE, IClassMove, (f,params,state) => {
 def_instr!(SHL, IClassShl, (f, params, state) => {
 	{ false };
 	{ write!(f, "{} := {} << {}", params[0], params[1], params[2]) };
-	{ unimplemented!(); };
+	{
+		let v = state.get(params[1]);
+		let count = state.get(params[2]);
+		if let Some(c) = count.val_known()
+		{
+			if c >= v.bitsize() as u64 {
+				state.set(params[0], Value::known(0));
+			}
+			else {
+				let (extra,res) = v << c as uint;
+				state.set(params[0], res);
+				//state.set_flag(FlagCarry, extra & Value::known(1))
+			}
+		}
+		else
+		{
+			warn!("TODO: SHL by a set/range of values");
+			state.set(params[0], Value::unknown());
+		}
+	};
 	{ unimplemented!(); };
 })
 
@@ -87,6 +106,20 @@ def_instr!(ADD, IClassAdd, (f,params,state) => {
 	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
 	{
 		let val = state.get(params[1]) + state.get(params[2]);
+		state.set(params[0], val);
+		// TODO: Set flags based on val
+	};
+	{
+		unimplemented!();
+	};
+})
+
+// SUB - Subtraction of two values into a register
+def_instr!(SUB, IClassSub, (f,params,state) => {
+	{ false };
+	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{
+		let val = state.get(params[1]) - state.get(params[2]);
 		state.set(params[0], val);
 		// TODO: Set flags based on val
 	};

@@ -88,7 +88,9 @@ fn main()
 		let mut cont = false;
 		// - Convert the current queue of "to-process" addresses (jump and call targets)
 		cont |= disasm.convert_queue() > 0;
-		// - Apply block and method determining
+		// - Determine code blocks (and methods)
+		// - Acquire clobber lists for methods
+		//  > Scan methods from leaf methods first (loops handled somehow?)
 		// - Determine value ranges
 		// - Rescan for new addresses to process
 		if !cont {

@@ -18,22 +18,33 @@ pub enum Value<T: Int>
 	// TODO: Support multi-state, e.g. Unknown or a set of possible values
 }
 
+/*
+pub enum ValueBool
+{
+	ValueBoolTrue,
+	ValueBoolFalse,
+	ValueBoolUnknown,
+}
+*/
+
 struct ValuePossibilities<'a,T:Int+'static>
 {
 	val: &'a Value<T>,
 	idx: uint,
 }
 
-impl<T: Int> Value<T>
+impl<T: Int+Unsigned> Value<T>
 {
-	pub fn unknown() -> Value<T>
-	{
+	pub fn unknown() -> Value<T> {
 		ValueUnknown
 	}
-	pub fn known(val: T) -> Value<T>
-	{
+	pub fn known(val: T) -> Value<T> {
 		ValueKnown(val)
 	}
+	pub fn zero() -> Value<T> {
+		ValueKnown( NumCast::from(0u).unwrap() )
+	}
+	
 	pub fn zero_extend<U: Unsigned+Int>(val: Value<U>) -> Value<T>
 	{
 		match val
@@ -56,6 +67,10 @@ impl<T: Int> Value<T>
 			}
 		_ => ValueUnknown,	// TODO: Handle mask+value (or similar)
 		}
+	}
+
+	pub fn bitsize(&self) -> uint {
+		::std::mem::size_of::<T>() * 8
 	}
 	
 	/// Truncate (or zero-extend) a value into another size
@@ -113,6 +128,20 @@ impl<T: Int+Unsigned> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
 		}
 	}
 }
+/// Subtract two values
+impl<T: Int+Unsigned> ::std::ops::Sub<Value<T>,Value<T>> for Value<T>
+{
+	fn sub(&self, other: &Value<T>) -> Value<T>
+	{
+		match (self, other)
+		{
+		(&ValueUnknown,_) => ValueUnknown,
+		(_,&ValueUnknown) => ValueUnknown,
+		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a-b),
+		}
+	}
+}
+
 /// Bitwise AND
 impl<T: Int+Unsigned> ::std::ops::BitAnd<Value<T>,Value<T>> for Value<T>
 {
@@ -124,6 +153,25 @@ impl<T: Int+Unsigned> ::std::ops::BitAnd<Value<T>,Value<T>> for Value<T>
 		(&ValueUnknown,_) => ValueUnknown,
 		(_,&ValueUnknown) => ValueUnknown,
 		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a&b),
+		}
+	}
+}
+impl<T: Int+Unsigned> ::std::ops::Shl<uint,(Value<T>,Value<T>)> for Value<T>
+{
+	fn shl(&self, &rhs: &uint) -> (Value<T>,Value<T>)
+	{
+		if rhs == self.bitsize() {
+			(*self,Value::zero())
+		}
+		else if rhs == 0 {
+			(Value::zero(),*self)
+		}
+		else {
+			match self
+			{
+			&ValueKnown(a) => (ValueKnown(a>>(self.bitsize()-rhs)), ValueKnown(a<<rhs)),
+			_ => (ValueUnknown,ValueUnknown),
+			}
 		}
 	}
 }

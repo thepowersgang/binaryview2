@@ -44,7 +44,6 @@ impl<'mem> State<'mem>
 		instr.class.forwards(self, instr.params.as_slice());
 	}
 	
-	
 	/// Get the value of a parameter (register)
 	pub fn get(&mut self, param: ::disasm::InstrParam) -> Value<u64>
 	{
