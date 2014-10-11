@@ -271,11 +271,38 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 		v @ _ => fail!("ARM THUMB 0x10 Unmatched {:x}", v)
 		},
 	// 0x11: Special data instructions, branch and exchange
-	0x11 => match (word >> 6) & 0xF
+	0x11 => {
+		let Rd = (word.bits(0,3) | word.bits(7,1) << 3) as u8;
+		match (word >> 6) & 0xF
 		{
+		// ADD R, R, R
+		0x0 => Instruction::new(
+			2, 0xE, InstrSize32, &common_instrs::ADD,
+			vec![ reg_T(word, 0), reg_T(word, 3), reg_T(word, 6) ]
+			),
+		// ADD Rd, Rd, Rn (high)
+		0x1 ... 0x3 => {
+			if Rd == 15 {
+				error!("TODO: MOV PC, PC+Rn");
+				return Err( () );
+			}
+			else {
+				Instruction::new(
+					2, 0xE, InstrSize32, &common_instrs::ADD,
+					vec![ ParamTrueReg(Rd), ParamTrueReg(Rd), reg(word as u32,3) ]
+					)
+			}
+			},
+		0x4 => {
+			error!("UNPREDICTABLE Thumb 0x11:4");
+			return Err( () );
+			},
+		0x5 ... 0x7 => Instruction::new(
+				2, 0xE, InstrSize32, &common_instrs::SUB,
+				vec![ ParamTmpReg(0), ParamTrueReg(Rd), reg(word as u32, 3) ]
+			),
 		// Move Register (High)
 		0x9 ... 0xb => {
-			let Rd = (word & 7) | ((word >> 7) & 1) << 3;
 			let Rn = (word >> 3) & 0xF;
 			if Rd == 15 {
 				Instruction::new(2, 0xE, InstrSizeNA, &common_instrs::JUMP,
@@ -295,6 +322,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 			error!("Unknown opcode 11:{:x}", v);
 			return Err( () )
 			},
+		}
 		},
 	// LDR Rt, [PC,#imm8]
 	0x12 ... 0x13 => Instruction::new(
