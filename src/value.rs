@@ -7,6 +7,7 @@
 // A core type to BinaryView, this represents a register value during execution and a possible value
 // for RAM.
 use std::num::Zero;
+use std::fmt::LowerHex;
 
 /// A dynamic value (range determined during execution)
 #[deriving(Clone,PartialEq)]
@@ -34,7 +35,7 @@ struct ValuePossibilities<'a,T:Int+'static>
 	idx: uint,
 }
 
-impl<T: Int+Unsigned> Value<T>
+impl<T: Int+Unsigned+Zero> Value<T>
 {
 	pub fn unknown() -> Value<T> {
 		ValueUnknown
@@ -43,9 +44,10 @@ impl<T: Int+Unsigned> Value<T>
 		ValueKnown(val)
 	}
 	pub fn zero() -> Value<T> {
-		ValueKnown( NumCast::from(0u).unwrap() )
+		ValueKnown( Zero::zero() )
 	}
 	
+	/// Zero-extend a value to this type
 	pub fn zero_extend<U: Unsigned+Int>(val: Value<U>) -> Value<T>
 	{
 		match val
@@ -57,14 +59,17 @@ impl<T: Int+Unsigned> Value<T>
 		ValueUnknown => ValueUnknown,
 		}
 	}
+	/// Concatenate two values into a larger value
+	/// U must be half the size of T
 	pub fn concat<U: Int>(left: Value<U>, right: Value<U>) -> Value<T>
 	{
+		assert_eq!( ::std::mem::size_of::<U>() * 2, ::std::mem::size_of::<T>() );
 		match (left,right)
 		{
 		(ValueKnown(a),ValueKnown(b)) => {
 			let a_u: T = NumCast::from(a).unwrap();
 			let b_u: T = NumCast::from(b).unwrap();
-			ValueKnown(a_u | b_u << (4*::std::mem::size_of::<T>()))
+			ValueKnown(a_u | b_u << 8*::std::mem::size_of::<U>())
 			}
 		_ => ValueUnknown,	// TODO: Handle mask+value (or similar)
 		}
@@ -126,6 +131,8 @@ impl<T: Int+Unsigned> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
 	{
 		match (self, other)
 		{
+		(_,&ValueKnown(v)) if v == Zero::zero() => *self,
+		(&ValueKnown(v),_) if v == Zero::zero() => *other,
 		(&ValueUnknown,_) => ValueUnknown,
 		(_,&ValueUnknown) => ValueUnknown,
 		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a+b),
@@ -139,10 +146,12 @@ impl<T: Int+Unsigned> ::std::ops::Sub<Value<T>,Value<T>> for Value<T>
 	{
 		match (self, other)
 		{
+		// - Subtracting nothing, pass value through unmolested
 		(_,&ValueKnown(v)) if v == Zero::zero() => *self,
-		(&ValueKnown(v),_) if v == Zero::zero() => *other,
+		// - Pure unknown poisons
 		(&ValueUnknown,_) => ValueUnknown,
 		(_,&ValueUnknown) => ValueUnknown,
+		// - Known resolves
 		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a-b),
 		}
 	}
@@ -179,8 +188,13 @@ impl<T: Int+Unsigned> ::std::ops::BitAnd<Value<T>,Value<T>> for Value<T>
 		// TODO: Restrict range of unknown
 		match (self, other)
 		{
+		// - Zero nukes result
+		(_,&ValueKnown(v)) if v == Zero::zero() => Value::zero(),
+		(&ValueKnown(v),_) if v == Zero::zero() => Value::zero(),
+		// - Pure unkown poisons
 		(&ValueUnknown,_) => ValueUnknown,
 		(_,&ValueUnknown) => ValueUnknown,
+		// - Known resolves
 		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a&b),
 		}
 	}
@@ -252,11 +266,15 @@ impl<T: Int+Unsigned> ::std::ops::Shl<uint,(Value<T>,Value<T>)> for Value<T>
 /// Logical Shift Right
 /// Returns (ShiftedBits, Result)
 /// - ShiftedBits are in the upper bits of the value (e.g. 1 >> 1 will have the top bit set)
-impl<T: Int+Unsigned> ::std::ops::Shr<uint,(Value<T>,Value<T>)> for Value<T>
+impl<T: Int+Unsigned+LowerHex> ::std::ops::Shr<uint,(Value<T>,Value<T>)> for Value<T>
 {
 	fn shr(&self, &rhs: &uint) -> (Value<T>,Value<T>)
 	{
-		if rhs == self.bitsize() {
+		if rhs > self.bitsize() {
+			error!("SHR {} by {} outside of max shift ({}), clamping", self, rhs, self.bitsize());
+			(*self,Value::zero())
+		}
+		else if rhs == self.bitsize() {
 			(*self,Value::zero())
 		}
 		else if rhs == 0 {
@@ -295,7 +313,7 @@ impl<T: Int+Unsigned> ::std::cmp::PartialOrd for Value<T>
 //	}
 //}
 
-impl<T: Int+Unsigned+::std::fmt::LowerHex> ::std::fmt::Show for Value<T>
+impl<T: Int+Unsigned+LowerHex> ::std::fmt::Show for Value<T>
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
 	{

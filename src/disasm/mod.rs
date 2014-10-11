@@ -96,13 +96,16 @@ impl<'a> Disassembled<'a>
 		ret
 	}
 	
+	/// Disassemble starting from a given address
 	pub fn convert_from(&mut self, mut addr: u64, mode: uint)
 	{
 		debug!("convert_from(addr={:#x},mode={})", addr, mode);
 		let mut todo = Vec::<(u64,uint)>::new();
 		
 		let mut state = State::null(self.cpu, self.memory);
+		// Disassembly pass (holds a mutable handle to the instruction list
 		{
+			// Locate the insert location for the first instruction
 			let mut pos = self.instructions.find_ins(|e| e.base.cmp(&addr));
 			if !pos.is_end() && pos.next().contains(addr)
 			{
@@ -112,6 +115,8 @@ impl<'a> Disassembled<'a>
 
 			let is_first_in_run = true;
 			
+			// Keep processing until either a terminal instruction is located (break)
+			// or an already-processed instruction is hit (while cond)
 			while pos.is_end() || !pos.next().contains(addr)
 			{
 				let mut instr = match self.cpu.disassemble(self.memory, addr, mode)
