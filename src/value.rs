@@ -9,6 +9,12 @@
 use std::num::Zero;
 use std::fmt::LowerHex;
 
+pub trait ValueType : Int + Unsigned + Zero + LowerHex { }
+impl ValueType for u8 {}
+impl ValueType for u16 {}
+impl ValueType for u32 {}
+impl ValueType for u64 {}
+
 /// A dynamic value (range determined during execution)
 #[deriving(Clone,PartialEq)]
 pub enum Value<T: Int>
@@ -33,7 +39,7 @@ struct ValuePossibilities<'a,T:Int+'static>
 	idx: uint,
 }
 
-impl<T: Int+Unsigned+Zero> Value<T>
+impl<T: ValueType> Value<T>
 {
 	pub fn unknown() -> Value<T> {
 		ValueUnknown
@@ -50,9 +56,22 @@ impl<T: Int+Unsigned+Zero> Value<T>
 		let v = top | (!top);
 		ValueKnown( v )
 	}
+	pub fn cast<U: ValueType>(val: U) -> T {
+		match NumCast::from(val)
+		{
+		Some(v) => v,
+		None => unsafe {
+			fail!("Unable to cast {:#x} from {} to {}",
+				val,
+				(*::std::intrinsics::get_tydesc::<U>()).name,
+				(*::std::intrinsics::get_tydesc::<T>()).name
+				);
+			},
+		}
+	}
 	
 	/// Zero-extend a value to this type
-	pub fn zero_extend<U: Unsigned+Int>(val: Value<U>) -> Value<T>
+	pub fn zero_extend<U: ValueType>(val: Value<U>) -> Value<T>
 	{
 		match val
 		{
@@ -65,7 +84,7 @@ impl<T: Int+Unsigned+Zero> Value<T>
 	}
 	/// Concatenate two values into a larger value
 	/// U must be half the size of T
-	pub fn concat<U: Int>(left: Value<U>, right: Value<U>) -> Value<T>
+	pub fn concat<U: ValueType>(left: Value<U>, right: Value<U>) -> Value<T>
 	{
 		assert_eq!( ::std::mem::size_of::<U>() * 2, ::std::mem::size_of::<T>() );
 		match (left,right)
@@ -84,12 +103,12 @@ impl<T: Int+Unsigned+Zero> Value<T>
 	}
 	
 	/// Truncate (or zero-extend) a value into another size
-	pub fn truncate<U: Int+Unsigned>(&self) -> Value<U>
+	pub fn truncate<U: ValueType>(&self) -> Value<U>
 	{
 		match self
 		{
 		&ValueKnown(a) => {
-			let a_u: U = NumCast::from(a).unwrap();
+			let a_u: U = Value::<U>::cast(a);
 			ValueKnown(a_u)
 			}
 		&ValueUnknown => ValueUnknown,
@@ -146,7 +165,7 @@ impl<T: Int+Unsigned+Zero> Value<T>
 // Operations on unknown values
 // --------------------------------------------------------------------
 /// Add two values
-impl<T: Int+Unsigned> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
 {
 	fn add(&self, other: &Value<T>) -> Value<T>
 	{
@@ -161,7 +180,7 @@ impl<T: Int+Unsigned> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
 	}
 }
 /// Subtract two values
-impl<T: Int+Unsigned> ::std::ops::Sub<Value<T>,Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::Sub<Value<T>,Value<T>> for Value<T>
 {
 	fn sub(&self, other: &Value<T>) -> Value<T>
 	{
@@ -179,7 +198,7 @@ impl<T: Int+Unsigned> ::std::ops::Sub<Value<T>,Value<T>> for Value<T>
 }
 /// Multiply two values
 /// Returns a pair of values - Upper and lower parts of the result
-impl<T: Int+Unsigned+Zero> ::std::ops::Mul<Value<T>,(Value<T>,Value<T>)> for Value<T>
+impl<T: ValueType+Zero> ::std::ops::Mul<Value<T>,(Value<T>,Value<T>)> for Value<T>
 {
 	fn mul(&self, other: &Value<T>) -> (Value<T>,Value<T>)
 	{
@@ -202,7 +221,7 @@ impl<T: Int+Unsigned+Zero> ::std::ops::Mul<Value<T>,(Value<T>,Value<T>)> for Val
 	}
 }
 /// Bitwise AND
-impl<T: Int+Unsigned> ::std::ops::BitAnd<Value<T>,Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::BitAnd<Value<T>,Value<T>> for Value<T>
 {
 	fn bitand(&self, other: &Value<T>) -> Value<T>
 	{
@@ -221,7 +240,7 @@ impl<T: Int+Unsigned> ::std::ops::BitAnd<Value<T>,Value<T>> for Value<T>
 	}
 }
 /// Bitwise OR
-impl<T: Int+Unsigned> ::std::ops::BitOr<Value<T>,Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::BitOr<Value<T>,Value<T>> for Value<T>
 {
 	fn bitor(&self, other: &Value<T>) -> Value<T>
 	{
@@ -235,7 +254,7 @@ impl<T: Int+Unsigned> ::std::ops::BitOr<Value<T>,Value<T>> for Value<T>
 	}
 }
 /// Bitwise Exclusive OR
-impl<T: Int+Unsigned> ::std::ops::BitXor<Value<T>,Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::BitXor<Value<T>,Value<T>> for Value<T>
 {
 	fn bitxor(&self, other: &Value<T>) -> Value<T>
 	{
@@ -249,7 +268,7 @@ impl<T: Int+Unsigned> ::std::ops::BitXor<Value<T>,Value<T>> for Value<T>
 }
 
 /// Unary NOT (bitwise)
-impl<T: Int+Unsigned> ::std::ops::Not<Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::Not<Value<T>> for Value<T>
 {
 	fn not(&self) -> Value<T>
 	{
@@ -264,7 +283,7 @@ impl<T: Int+Unsigned> ::std::ops::Not<Value<T>> for Value<T>
 /// Logical Shift Left
 /// Returns (ShiftedBits, Result)
 /// - ShiftedBits are in the lower bits of the value (e.g. -1 << 1 will have the bottom bit set)
-impl<T: Int+Unsigned> ::std::ops::Shl<uint,(Value<T>,Value<T>)> for Value<T>
+impl<T: ValueType> ::std::ops::Shl<uint,(Value<T>,Value<T>)> for Value<T>
 {
 	fn shl(&self, &rhs: &uint) -> (Value<T>,Value<T>)
 	{
@@ -287,7 +306,7 @@ impl<T: Int+Unsigned> ::std::ops::Shl<uint,(Value<T>,Value<T>)> for Value<T>
 /// Logical Shift Right
 /// Returns (ShiftedBits, Result)
 /// - ShiftedBits are in the upper bits of the value (e.g. 1 >> 1 will have the top bit set)
-impl<T: Int+Unsigned+LowerHex> ::std::ops::Shr<uint,(Value<T>,Value<T>)> for Value<T>
+impl<T: ValueType+LowerHex> ::std::ops::Shr<uint,(Value<T>,Value<T>)> for Value<T>
 {
 	fn shr(&self, &rhs: &uint) -> (Value<T>,Value<T>)
 	{
@@ -312,7 +331,7 @@ impl<T: Int+Unsigned+LowerHex> ::std::ops::Shr<uint,(Value<T>,Value<T>)> for Val
 	}
 }
 
-impl<T: Int+Unsigned> ::std::cmp::PartialOrd for Value<T>
+impl<T: ValueType> ::std::cmp::PartialOrd for Value<T>
 {
 	fn partial_cmp(&self, other: &Value<T>) -> Option<Ordering>
 	{
@@ -324,7 +343,7 @@ impl<T: Int+Unsigned> ::std::cmp::PartialOrd for Value<T>
 		}
 	}
 }
-//impl<T: Int+Unsigned> ::std::cmp::PartialEq for Value<T>
+//impl<T: ValueType> ::std::cmp::PartialEq for Value<T>
 //{
 //	fn eq(&self, other: &Value<T>) -> Value<T>
 //	{
@@ -334,7 +353,7 @@ impl<T: Int+Unsigned> ::std::cmp::PartialOrd for Value<T>
 //	}
 //}
 
-impl<T: Int+Unsigned+LowerHex> ::std::fmt::Show for Value<T>
+impl<T: ValueType> ::std::fmt::Show for Value<T>
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
 	{
@@ -346,7 +365,7 @@ impl<T: Int+Unsigned+LowerHex> ::std::fmt::Show for Value<T>
 	}
 }
 
-impl<'a,T: Int+Unsigned> Iterator<T> for ValuePossibilities<'a,T>
+impl<'a,T: ValueType> Iterator<T> for ValuePossibilities<'a,T>
 {
 	fn next(&mut self) -> Option<T>
 	{

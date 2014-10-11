@@ -1,7 +1,7 @@
 //
 //
 //
-use value::Value;
+use value::{Value,ValueType};
 use memory::MemoryStateAccess;
 
 static NUM_TMPREGS: uint = 4;
@@ -102,7 +102,7 @@ impl<'mem> State<'mem>
 	}
 	
 	/// Read from emulated memory
-	pub fn read<T:Int+Unsigned+MemoryStateAccess+::std::fmt::LowerHex>(&mut self, addr: Value<u64>) -> Value<T>
+	pub fn read<T:ValueType+MemoryStateAccess>(&mut self, addr: Value<u64>) -> Value<T>
 	{
 		// TODO: Tag unknown values such that accesses to an unknown base can be tracked
 		// > Tag with origin of unknown? Probably
@@ -132,7 +132,7 @@ impl<'mem> State<'mem>
 		ret
 	}
 	/// Write to emulated memory
-	pub fn write<T:Int+Unsigned+MemoryStateAccess+::std::fmt::LowerHex>(&mut self, addr: Value<u64>, val: Value<T>)
+	pub fn write<T:ValueType+MemoryStateAccess>(&mut self, addr: Value<u64>, val: Value<T>)
 	{
 		debug!("write({} <= {})", addr, val);
 		match self.mode
