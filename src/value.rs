@@ -6,6 +6,7 @@
 //
 // A core type to BinaryView, this represents a register value during execution and a possible value
 // for RAM.
+use std::num::Zero;
 
 /// A dynamic value (range determined during execution)
 #[deriving(Clone,PartialEq)]
@@ -115,6 +116,9 @@ impl<T: Int+Unsigned> Value<T>
 	}
 }
 
+// --------------------------------------------------------------------
+// Operations on unknown values
+// --------------------------------------------------------------------
 /// Add two values
 impl<T: Int+Unsigned> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
 {
@@ -135,13 +139,38 @@ impl<T: Int+Unsigned> ::std::ops::Sub<Value<T>,Value<T>> for Value<T>
 	{
 		match (self, other)
 		{
+		(_,&ValueKnown(v)) if v == Zero::zero() => *self,
+		(&ValueKnown(v),_) if v == Zero::zero() => *other,
 		(&ValueUnknown,_) => ValueUnknown,
 		(_,&ValueUnknown) => ValueUnknown,
 		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a-b),
 		}
 	}
 }
-
+/// Multiply two values
+/// Returns a pair of values - Upper and lower parts of the result
+impl<T: Int+Unsigned+Zero> ::std::ops::Mul<Value<T>,(Value<T>,Value<T>)> for Value<T>
+{
+	fn mul(&self, other: &Value<T>) -> (Value<T>,Value<T>)
+	{
+		match (self, other)
+		{
+		// Either being zero causes the result to be zero
+		(_,&ValueKnown(v)) if v == Zero::zero() => (Value::zero(),Value::zero()),
+		(&ValueKnown(v),_) if v == Zero::zero() => (Value::zero(),Value::zero()),
+		// Otherwise, unknown values are poisonous
+		(&ValueUnknown,_) => (ValueUnknown,ValueUnknown),
+		(_,&ValueUnknown) => (ValueUnknown,ValueUnknown),
+		// But known values are fixed
+		(&ValueKnown(a),&ValueKnown(b)) => {
+			if a*b < a || a*b < b {
+				error!("TODO: Handle overflow in value multiply");
+			}
+			(Value::zero(),ValueKnown(a*b))
+			},
+		}
+	}
+}
 /// Bitwise AND
 impl<T: Int+Unsigned> ::std::ops::BitAnd<Value<T>,Value<T>> for Value<T>
 {
@@ -156,6 +185,50 @@ impl<T: Int+Unsigned> ::std::ops::BitAnd<Value<T>,Value<T>> for Value<T>
 		}
 	}
 }
+/// Bitwise OR
+impl<T: Int+Unsigned> ::std::ops::BitOr<Value<T>,Value<T>> for Value<T>
+{
+	fn bitor(&self, other: &Value<T>) -> Value<T>
+	{
+		// TODO: Restrict range of unknown
+		match (self, other)
+		{
+		(&ValueUnknown,_) => ValueUnknown,
+		(_,&ValueUnknown) => ValueUnknown,
+		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a|b),
+		}
+	}
+}
+/// Bitwise Exclusive OR
+impl<T: Int+Unsigned> ::std::ops::BitXor<Value<T>,Value<T>> for Value<T>
+{
+	fn bitxor(&self, other: &Value<T>) -> Value<T>
+	{
+		match (self, other)
+		{
+		(&ValueUnknown,_) => ValueUnknown,
+		(_,&ValueUnknown) => ValueUnknown,
+		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a^b),
+		}
+	}
+}
+
+/// Unary NOT (bitwise)
+impl<T: Int+Unsigned> ::std::ops::Not<Value<T>> for Value<T>
+{
+	fn not(&self) -> Value<T>
+	{
+		match self
+		{
+		&ValueUnknown => ValueUnknown,
+		&ValueKnown(a) => ValueKnown(!a),
+		}
+	}
+}
+
+/// Logical Shift Left
+/// Returns (ShiftedBits, Result)
+/// - ShiftedBits are in the lower bits of the value (e.g. -1 << 1 will have the bottom bit set)
 impl<T: Int+Unsigned> ::std::ops::Shl<uint,(Value<T>,Value<T>)> for Value<T>
 {
 	fn shl(&self, &rhs: &uint) -> (Value<T>,Value<T>)
@@ -170,6 +243,30 @@ impl<T: Int+Unsigned> ::std::ops::Shl<uint,(Value<T>,Value<T>)> for Value<T>
 			match self
 			{
 			&ValueKnown(a) => (ValueKnown(a>>(self.bitsize()-rhs)), ValueKnown(a<<rhs)),
+			// TODO: Return a pair of masked values
+			_ => (ValueUnknown,ValueUnknown),
+			}
+		}
+	}
+}
+/// Logical Shift Right
+/// Returns (ShiftedBits, Result)
+/// - ShiftedBits are in the upper bits of the value (e.g. 1 >> 1 will have the top bit set)
+impl<T: Int+Unsigned> ::std::ops::Shr<uint,(Value<T>,Value<T>)> for Value<T>
+{
+	fn shr(&self, &rhs: &uint) -> (Value<T>,Value<T>)
+	{
+		if rhs == self.bitsize() {
+			(*self,Value::zero())
+		}
+		else if rhs == 0 {
+			(Value::zero(),*self)
+		}
+		else {
+			match self
+			{
+			&ValueKnown(a) => (ValueKnown(a<<(self.bitsize()-rhs)), ValueKnown(a>>rhs)),
+			// TODO: Return a pair of masked values
 			_ => (ValueUnknown,ValueUnknown),
 			}
 		}

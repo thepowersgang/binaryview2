@@ -98,6 +98,7 @@ fn main()
 		}
 	}
 	// - Dump output (JSON with states?)
+	debug!("TOTAL Instruction Count = {}", disasm.instr_count());
 }
 
 // vim: ft=rust

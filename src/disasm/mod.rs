@@ -79,12 +79,15 @@ impl<'a> Disassembled<'a>
 			todo_list: Vec::new(),
 		}
 	}
+	pub fn instr_count(&self) -> uint {
+		self.instructions.len()
+	}
 	
+	/// Run disassembly on the todo list
 	pub fn convert_queue(&mut self) -> uint
 	{
 		let todo = ::std::mem::replace(&mut self.todo_list, Vec::new());
 		debug!("todo_list = {}", todo);
-		// TODO: 
 		let ret = todo.len();
 		for (addr,mode) in todo.into_iter()
 		{
@@ -171,7 +174,6 @@ impl<'a> Disassembled<'a>
 		}
 		
 		debug!("- Complete at IP={:#x}", addr);
-		
 	}
 }
 
@@ -213,7 +215,8 @@ impl ::std::fmt::Show for Instruction
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
 	{
-		try!( write!(f, "[{}:{:8x}]+{:u} {{{}}} {} ", self.mode, self.base, self.len, self.opsize, self.class.name()) );
+		try!( write!(f, "[{}:{:8x}]+{:u} ", self.mode, self.base, self.len) );
+		try!( write!(f, "{{{}}}:{:x} {} ", self.opsize, self.condition, self.class.name()) );
 		try!( self.class.print(f, self.params.as_slice()) );
 		Ok( () )
 	}

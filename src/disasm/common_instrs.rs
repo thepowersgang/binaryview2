@@ -100,6 +100,61 @@ def_instr!(SHL, IClassShl, (f, params, state) => {
 	{ unimplemented!(); };
 })
 
+// SHR - Bitwise Shift Right
+def_instr!(SHR, IClassShr, (f, params, state) => {
+	{ false };
+	{ write!(f, "{} := {} >> {}", params[0], params[1], params[2]) };
+	{
+		let v = state.get(params[1]);
+		let count = state.get(params[2]);
+		if let Some(c) = count.val_known()
+		{
+			if c >= v.bitsize() as u64 {
+				state.set(params[0], Value::known(0));
+			}
+			else {
+				let (extra,res) = v >> c as uint;
+				state.set(params[0], res);
+				//state.set_flag(FlagCarry, extra & Value::known(1))
+			}
+		}
+		else
+		{
+			warn!("TODO: SHL by a set/range of values");
+			state.set(params[0], Value::unknown());
+		}
+	};
+	{ unimplemented!(); };
+})
+
+// ROR - Bitwise Rotate Right
+def_instr!(ROR, IClassRor, (f, params, state) => {
+	{ false };
+	{ write!(f, "{} := {} >>> {}", params[0], params[1], params[2]) };
+	{
+		let v = state.get(params[1]);
+		let count = state.get(params[2]);
+		if let Some(c) = count.val_known()
+		{
+			if c >= v.bitsize() as u64 {
+				state.set(params[0], Value::known(0));
+			}
+			else {
+				let (extra,res) = v >> c as uint;
+				//let (_,high) = v << c as uint
+				state.set(params[0], res | extra);
+				//state.set_flag(FlagCarry, extra & Value::known(1))
+			}
+		}
+		else
+		{
+			warn!("TODO: SHL by a set/range of values");
+			state.set(params[0], Value::unknown());
+		}
+	};
+	{ unimplemented!(); };
+})
+
 // ADD - Addition of two values into a register
 def_instr!(ADD, IClassAdd, (f,params,state) => {
 	{ false };
@@ -125,6 +180,77 @@ def_instr!(SUB, IClassSub, (f,params,state) => {
 	};
 	{
 		unimplemented!();
+	};
+})
+
+// AND - bitwise AND of two values into a register
+def_instr!(AND, IClassAnd, (f,params,state) => {
+	{ false };
+	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{
+		let val = state.get(params[1]) & state.get(params[2]);
+		state.set(params[0], val);
+		// TODO: Set flags based on val
+	};
+	{
+		unimplemented!();
+	};
+})
+
+// Bitwise OR of two values into a register
+def_instr!(OR, IClassOr, (f,params,state) => {
+	{ false };
+	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{
+		let val = state.get(params[1]) | state.get(params[2]);
+		state.set(params[0], val);
+		// TODO: Set flags based on val
+	};
+	{
+		unimplemented!();
+	};
+})
+
+// Bitwise Exclusive OR of two values into a register
+def_instr!(XOR, IClassXor, (f,params,state) => {
+	{ false };
+	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{
+		let val = state.get(params[1]) ^ state.get(params[2]);
+		state.set(params[0], val);
+		// TODO: Set flags based on val
+	};
+	{
+		unimplemented!();
+	};
+})
+
+// MUL - Multiply two values into a register
+def_instr!(MUL, IClassMul, (f,params,state) => {
+	{ false };
+	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{
+		let (_hi,val) = state.get(params[1]) * state.get(params[2]);
+		state.set(params[0], val);
+		// TODO: Set flags based on val
+	};
+	{
+		unimplemented!();
+	};
+})
+
+
+def_instr!(NOT, IClassNot, (f,params,state) => {
+	{ false };
+	{ write!(f, "{}, {}", params[0], params[1]) };
+	{
+		let val = !state.get(params[1]);
+		state.set(params[0], val);
+	};
+	{
+		// Reverse, just read from #0 and write to #1
+		let val = !state.get(params[0]);
+		state.set(params[1], val);
 	};
 })
 

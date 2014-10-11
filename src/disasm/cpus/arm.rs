@@ -206,6 +206,54 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 		2, 0xE, InstrSize32, &common_instrs::SUB,	// < Use SUB and assign to #tr0
 		vec![ ParamTmpReg(0), reg_T(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
 		),
+	// 0x10 - Data Processing (Sect A6-8)
+	0x10 => match (word >> 6) & 0xF
+		{
+		v @ 0x0 ... 0x07 | v @ 0xc ... 0xe => Instruction::new(
+				2, 0xE, InstrSize32,
+				match v
+				{
+				0x0 => &common_instrs::AND as &InstructionClass,
+				0x1 => &common_instrs::XOR as &InstructionClass,
+				0x2 => &common_instrs::SHL as &InstructionClass,
+				0x3 => &common_instrs::SHR as &InstructionClass,
+				0x4 => &instrs::ASR        as &InstructionClass,
+				0x5 => &common_instrs::ADD as &InstructionClass,
+				0x6 => &common_instrs::SUB as &InstructionClass,
+				0x7 => &common_instrs::ROR as &InstructionClass,
+				0xc => &common_instrs::OR  as &InstructionClass,
+				0xd => &common_instrs::MUL as &InstructionClass,
+				0xe => &instrs::BIC        as &InstructionClass,
+				_ => fail!("ARM THUMB 0x10:{{0-7,c-e}} Unmatched {}", v)
+				},
+				vec![ reg_T(word, 0), reg_T(word,3), reg_T(word,6) ]
+			),
+		// - TEST Rt, Rn
+		0x8 => Instruction::new(
+			2, 0xE, InstrSize32, &common_instrs::AND,
+			vec![ ParamTmpReg(0), reg_T(word, 0), reg_T(word,3) ]
+			),
+		// - Reverse Subtract (RSB) (Negate?)
+		0x9 => Instruction::new(
+			2, 0xE, InstrSize32, &common_instrs::SUB,
+			vec![ reg_T(word, 0), ParamImmediate(0), reg_T(word,3) ]
+			),
+		// - CMP Rt, Rn
+		0xA => Instruction::new(
+			2, 0xE, InstrSize32, &common_instrs::SUB,
+			vec![ ParamTmpReg(0), reg_T(word, 0), reg_T(word,3) ]
+			),
+		0xB => {
+			error!("ARM THUMB 0x10:B Undefined");
+			return Err( () );
+			},
+		// - NOT
+		0xF => Instruction::new(
+			2, 0xE, InstrSize32, &common_instrs::NOT,
+			vec![ reg_T(word, 0), reg_T(word,3) ]
+			),
+		v @ _ => fail!("ARM THUMB 0x10 Unmatched {:x}", v)
+		},
 	// 0x11: Special data instructions, branch and exchange
 	0x11 => match (word >> 6) & 0xF
 		{
@@ -533,6 +581,65 @@ mod instrs
 			let _ = state;
 			unimplemented!();
 		};
+	})
+
+	// ASR - Arithmetic Shift Right
+	def_instr!(ASR, IClassAsr, (f, params, state) => {
+		{ false };
+		{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+		{
+			let v = state.get(params[1]);
+			let count = state.get(params[2]);
+			if let Some(c) = count.val_known()
+			{
+				if c >= v.bitsize() as u64 {
+					state.set(params[0], Value::known(0));
+				}
+				else {
+					error!("TODO: ARM ASR instruction");
+					unimplemented!();
+					//let (extra,res) = v >> c as uint;
+					//state.set(params[0], res);
+					//state.set_flag(FlagCarry, extra & Value::known(1))
+				}
+			}
+			else
+			{
+				warn!("TODO: ASR by a set/range of values");
+				state.set(params[0], Value::unknown());
+			}
+		};
+		{ unimplemented!(); };
+	})
+
+	// BIC - Bit Clear
+	def_instr!(BIC, IClassBic, (f, params, state) => {
+		{ false };
+		{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+		{
+			let v = state.get(params[1]);
+			let count = state.get(params[2]);
+			if let Some(c) = count.val_known()
+			{
+				if c >= v.bitsize() as u64 {
+					error!("Value out of range for BIC ({})", c);
+					state.set(params[0], Value::known(0));
+				}
+				else {
+					error!("TODO: ARM BIC instruction");
+					unimplemented!();
+					//let (extra,res) = v >> c as uint;
+					//state.set(params[0], res);
+					//state.set_flag(FlagCarry, extra & Value::known(1))
+				}
+			}
+			else
+			{
+				warn!("TODO: BIC by a set/range of values");
+				state.set(params[0], Value::unknown());
+			}
+		};
+		{ unimplemented!(); };
 	})
 }
 
