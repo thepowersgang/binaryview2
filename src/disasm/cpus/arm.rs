@@ -549,7 +549,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 	})
 }
 
-fn readmem<T: Int+::memory::MemoryStateAccess>(mem: &::memory::MemoryState, addr: u64) -> Result<T,()>
+fn readmem<T: ::value::ValueType+::memory::MemoryStateAccess>(mem: &::memory::MemoryState, addr: u64) -> Result<T,()>
 {
 	use memory::MemoryStateAccess;
 	match MemoryStateAccess::read(mem, addr)

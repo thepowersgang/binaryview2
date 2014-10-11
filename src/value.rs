@@ -17,7 +17,7 @@ impl ValueType for u64 {}
 
 /// A dynamic value (range determined during execution)
 #[deriving(Clone,PartialEq)]
-pub enum Value<T: Int>
+pub enum Value<T: ValueType>
 {
 	ValueUnknown,
 	ValueKnown(T),
@@ -33,7 +33,7 @@ pub enum ValueBool
 	ValueBoolUnknown,
 }
 
-struct ValuePossibilities<'a,T:Int+'static>
+struct ValuePossibilities<'a,T:ValueType+'static>
 {
 	val: &'a Value<T>,
 	idx: uint,
@@ -198,7 +198,7 @@ impl<T: ValueType> ::std::ops::Sub<Value<T>,Value<T>> for Value<T>
 }
 /// Multiply two values
 /// Returns a pair of values - Upper and lower parts of the result
-impl<T: ValueType+Zero> ::std::ops::Mul<Value<T>,(Value<T>,Value<T>)> for Value<T>
+impl<T: ValueType> ::std::ops::Mul<Value<T>,(Value<T>,Value<T>)> for Value<T>
 {
 	fn mul(&self, other: &Value<T>) -> (Value<T>,Value<T>)
 	{
@@ -306,7 +306,7 @@ impl<T: ValueType> ::std::ops::Shl<uint,(Value<T>,Value<T>)> for Value<T>
 /// Logical Shift Right
 /// Returns (ShiftedBits, Result)
 /// - ShiftedBits are in the upper bits of the value (e.g. 1 >> 1 will have the top bit set)
-impl<T: ValueType+LowerHex> ::std::ops::Shr<uint,(Value<T>,Value<T>)> for Value<T>
+impl<T: ValueType> ::std::ops::Shr<uint,(Value<T>,Value<T>)> for Value<T>
 {
 	fn shr(&self, &rhs: &uint) -> (Value<T>,Value<T>)
 	{
