@@ -9,6 +9,9 @@ static NUM_TMPREGS: uint = 4;
 /// Emulated CPU state during pseudo-execution
 pub struct State<'mem>
 {
+	/// Execution/Simulation mode
+	mode: RunMode,
+	
 	/// Reference to system memory
 	memory: &'mem ::memory::MemoryState,
 	/// Real registers - Static vector
@@ -23,12 +26,23 @@ pub struct State<'mem>
 	todo_list: Vec<(u64, uint)>,
 }
 
+enum RunMode
+{
+	/// Minimal state propagation
+	RunModeParse,
+	/// Stack enabled
+	RunModeBlockify,
+	/// Full memory and stack works
+	RunModeFull,
+}
+
 impl<'mem> State<'mem>
 {
 	/// Create a new empty state
 	pub fn null<'a>(cpu: &'a ::disasm::CPU, mem: &'a ::memory::MemoryState) -> State<'a>
 	{
 		State {
+			mode: RunModeParse,	// TODO: Receive as an argument
 			memory: mem,
 			registers: Vec::from_fn(cpu.num_regs(), |_| Value::unknown()),
 			tmpregs: [Value::unknown(), ..NUM_TMPREGS],
@@ -121,30 +135,47 @@ impl<'mem> State<'mem>
 	pub fn write<T:Int+Unsigned+MemoryStateAccess+::std::fmt::LowerHex>(&mut self, addr: Value<u64>, val: Value<T>)
 	{
 		debug!("write({} <= {})", addr, val);
-		error!("TODO: Support write access to simulated memory");
-		// Requirements:
-		// - Store locally a set of changes applied by this state
-		//  > Read should query this first.
-		// - This list is accessed by disasm code and applied to main memory as a value set once state is destroyed
+		match self.mode
+		{
+		RunModeFull => {
+			error!("TODO: Support write access to simulated memory");
+			// Requirements:
+			// - Store locally a set of changes applied by this state
+			//  > Read should query this first.
+			// - This list is accessed by disasm code and applied to main memory as a value set once state is destroyed
+			},
+		_ => {},
+		}
 	}
 
 	pub fn stack_push(&mut self, val: Value<u64>)
 	{
 		debug!("stack_push({})", val);
-		self.stack.push(val);
+		match self.mode
+		{
+		RunModeBlockify|RunModeFull => {
+			self.stack.push(val);
+			},
+		_ => {},
+		}
 	}
 	pub fn stack_pop(&mut self) -> Value<u64>
 	{
-		let rv = self.stack.pop();
+		let rv = match self.mode
+			{
+			RunModeBlockify|RunModeFull =>
+				match self.stack.pop()
+				{
+				Some(x) => x,
+				None => {
+					error!("Pop from empty stack");
+					Value::unknown()
+					},
+				},
+			_ => Value::unknown(),
+			};
 		debug!("stack_pop() = {}", rv);
-		match rv
-		{
-		Some(x) => x,
-		None => {
-			error!("Pop from empty stack");
-			Value::unknown()
-			},
-		}
+		rv
 	}
 
 	/// Add an address to be processed	
