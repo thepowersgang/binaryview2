@@ -97,7 +97,7 @@ impl<T: ValueType> Value<T>
 		_ => ValueUnknown,	// TODO: Handle mask+value (or similar)
 		}
 	}
-
+	
 	pub fn bitsize(&self) -> uint {
 		::std::mem::size_of::<T>() * 8
 	}

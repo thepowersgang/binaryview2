@@ -24,10 +24,11 @@ macro_rules! def_ucode{
 	};
 }
 
+/// Jump - 
 def_ucode!(JUMP, UCodeJump, (state, size, params) => {
 	{
 		let target = state.get( params[0] );
-		let mode = match params[1] { ::disasm::ParamImmediate(v) => v as uint, _ => fail!("") };
+		let mode = params[1].immediate() as uint;
 		state.add_target( target, mode );	// TODO: Get mode from state
 	};
 	{
@@ -38,7 +39,7 @@ def_ucode!(JUMP, UCodeJump, (state, size, params) => {
 def_ucode!(CALL, UCodeCall, (state, size, params) => {
 	{
 		let target = state.get( params[0] );
-		let mode = match params[1] { ::disasm::ParamImmediate(v) => v as uint, _ => fail!("") };
+		let mode = params[1].immediate() as uint;
 		state.add_target( target, mode );	// TODO: Get mode from state
 		// Clobber all registers
 		state.call_clobber(target, mode);

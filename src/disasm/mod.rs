@@ -215,9 +215,8 @@ impl Instruction
 		self.condition == 0xE && self.class.is_terminal(self.params.as_slice())
 	}
 
-	fn mode(&self) -> uint {
-		self.mode
-	}	
+	fn mode(&self) -> uint { self.mode }
+	fn opsize(&self) -> InstrSize { self.opsize }
 	fn params(&self) -> &[InstrParam] {
 		self.params.as_slice()
 	}

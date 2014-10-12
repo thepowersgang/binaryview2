@@ -6,11 +6,11 @@
 #![macro_escape]
 use disasm::InstructionClass;
 use disasm::{InstrParam,ParamTmpReg,ParamImmediate};
-use disasm::InstrSizeNA;
+use disasm::{InstrSizeNA,InstrSize8,InstrSize16,InstrSize32,InstrSize64};
 use disasm::microcode;
 use disasm::microcode::UCodeOp;
 use disasm::state::State;
-use value::Value;
+use value::{Value,ValueBool,ValueType};
 
 macro_rules! def_instr{
 	($name:ident, $class:ident, ($fmt:ident, $instr:ident, $params:ident, $state:ident) => {$isterm:block; $print:block;$forwards:block;$backwards:block;} )
@@ -33,9 +33,25 @@ macro_rules! def_instr{
 		}
 		fn backwards(&self, $state: &mut State, $instr: &::disasm::Instruction) {
 			let $params = $instr.params();
+			let _ = $params;
+			let _ = $state;
 			$backwards
 		}
 	}
+	}
+}
+
+/// Dispatch a call to a function using different size parameters depending on the instruction size
+macro_rules! size_call{
+	($size:expr, $fcn:ident($($args:expr),+)) => {
+		match $size
+		{
+		InstrSizeNA => fail!(concat!("InstrSizeNA when calling ", stringify!($fcn))),
+		InstrSize8  => $fcn::<u8> ($($args),+),
+		InstrSize16 => $fcn::<u16>($($args),+),
+		InstrSize32 => $fcn::<u32>($($args),+),
+		InstrSize64 => $fcn::<u64>($($args),+),
+		}
 	}
 }
 
@@ -87,14 +103,9 @@ def_instr!(SHL, IClassShl, (f, instr, params, state) => {
 		let count = state.get(params[2]);
 		if let Some(c) = count.val_known()
 		{
-			if c >= v.bitsize() as u64 {
-				state.set(params[0], Value::known(0));
-			}
-			else {
-				let (extra,res) = v << c as uint;
-				state.set(params[0], res);
-				//state.set_flag(FlagCarry, extra & Value::known(1))
-			}
+			let (ov,cf) = size_call!( instr.opsize(), shl_fwds(v.truncate(), c as uint) );
+			state.set(params[0], ov);
+			//state.set_flag(FlagCarry, cf);
 		}
 		else
 		{
@@ -104,6 +115,16 @@ def_instr!(SHL, IClassShl, (f, instr, params, state) => {
 	};
 	{ unimplemented!(); };
 })
+fn shl_fwds<T:ValueType>(val: Value<T>, count: uint) -> (Value<u64>,ValueBool)
+{
+	if count >= val.bitsize() {
+		(Value::known(0), ::value::ValueBoolUnknown)
+	}
+	else {
+		let (extra,res) = val << count;
+		(Value::zero_extend(val), extra.bit(0))
+	}
+}
 
 // SHR - Bitwise Shift Right
 def_instr!(SHR, IClassShr, (f, instr, params, state) => {
@@ -131,6 +152,7 @@ def_instr!(SHR, IClassShr, (f, instr, params, state) => {
 	};
 	{ unimplemented!(); };
 })
+
 
 // ROR - Bitwise Rotate Right
 def_instr!(ROR, IClassRor, (f, instr, params, state) => {
