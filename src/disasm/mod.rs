@@ -113,7 +113,7 @@ impl<'a> Disassembled<'a>
 			let mut pos = self.instructions.find_ins(|e| e.base.cmp(&addr));
 			if !pos.is_end() && pos.next().contains(addr)
 			{
-				debug!("- Already processed");
+				debug!("- Address {:#x},mode={} already processed", addr, mode);
 				return ;
 			}
 
@@ -178,7 +178,9 @@ impl<'a> Disassembled<'a>
 					p.insert( item );
 				}
 				},
-			_ => {},
+			::std::slice::Found(i) => {
+				self.instructions.get_mut(i).set_target();
+				},
 			}
 		}
 		
