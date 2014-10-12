@@ -160,6 +160,19 @@ impl MemoryState
 				Value::concat( a.read_u32(ofs+0), a.read_u32(ofs+4) )
 			)
 	}
+	
+	pub fn write_u8(&self, addr: u64, val: Value<u8>) {
+		fail!("TODO: MemoryState.write_u8(addr={},val={})", addr, val);
+	}
+	pub fn write_u16(&self, addr: u64, val: Value<u16>) {
+		fail!("TODO: MemoryState.write_u16(addr={},val={})", addr, val);
+	}
+	pub fn write_u32(&self, addr: u64, val: Value<u32>) {
+		fail!("TODO: MemoryState.write_u32(addr={},val={})", addr, val);
+	}
+	pub fn write_u64(&self, addr: u64, val: Value<u64>) {
+		fail!("TODO: MemoryState.write_u64(addr={},val={})", addr, val);
+	}
 }
 
 impl MemoryStateAccess for u8
@@ -170,7 +183,7 @@ impl MemoryStateAccess for u8
 	}
 	fn write(mem: &mut MemoryState, addr: u64, val: Value<u8>)
 	{
-		unimplemented!();
+		mem.write_u8(addr, val);
 	}
 }
 
@@ -182,7 +195,7 @@ impl MemoryStateAccess for u16
 	}
 	fn write(mem: &mut MemoryState, addr: u64, val: Value<u16>)
 	{
-		unimplemented!();
+		mem.write_u16(addr, val);
 	}
 }
 
@@ -194,7 +207,7 @@ impl MemoryStateAccess for u32
 	}
 	fn write(mem: &mut MemoryState, addr: u64, val: Value<u32>)
 	{
-		unimplemented!();
+		mem.write_u32(addr, val);
 	}
 }
 
@@ -206,7 +219,7 @@ impl MemoryStateAccess for u64
 	}
 	fn write(mem: &mut MemoryState, addr: u64, val: Value<u64>)
 	{
-		unimplemented!();
+		mem.write_u64(addr, val);
 	}
 }
 
