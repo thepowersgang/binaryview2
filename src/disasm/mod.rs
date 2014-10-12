@@ -9,6 +9,8 @@ mod state;
 mod microcode;
 pub mod cpus;
 
+pub static COND_ALWAYS: u8 = 0xFF;
+
 struct Instruction
 {
 	mode: uint,
@@ -56,6 +58,9 @@ trait CPU
 	fn disassemble(&self, &::memory::MemoryState, u64, uint) -> Result<Instruction,()>;
 	/// Prepare state for exection of an instruction at the specified address
 	fn prep_state(&self, &mut state::State, u64, uint);
+	
+	//// Check the outcome of a condition code check
+	//fn check_condition(&self, &mut state::State, u8) -> ValueBool;
 }
 
 pub struct Disassembled<'a>
@@ -211,7 +216,7 @@ impl Instruction
 		self.base <= addr && addr < self.base + self.len as u64
 	}
 	fn is_terminal(&self) -> bool {
-		self.condition == 0xE && self.class.is_terminal(self.params.as_slice())
+		self.condition == COND_ALWAYS && self.class.is_terminal(self.params.as_slice())
 	}
 
 	fn mode(&self) -> uint { self.mode }
