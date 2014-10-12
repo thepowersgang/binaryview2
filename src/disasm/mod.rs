@@ -64,6 +64,16 @@ impl<'a> Disassembled<'a>
 		ret
 	}
 	
+	pub fn pass_blockify(&mut self) -> uint
+	{
+		// 1. Iterate all instructions
+		// 2. When a jump target is hit, create a new code block
+		//  - At the end of the block, store register state
+		// 3. Assign a code block to all instructions
+		// 4. (side) Flag call targets
+		0
+	}
+	
 	/// Disassemble starting from a given address
 	pub fn convert_from(&mut self, addr: u64, mode: uint)
 	{
@@ -93,6 +103,7 @@ impl<'a> Disassembled<'a>
 			}
 		}
 	}
+	
 	/// (internal) Does the actual disassembly
 	///
 	/// Holds a mutable handle to self.instructions, so can't be part of convert_from
@@ -119,7 +130,7 @@ impl<'a> Disassembled<'a>
 				Ok(i) => i,
 				Err(e) => {
 					error!("Disassembly of {:#x} [mode={}] failed: {}", addr, mode, e);
-					return ()
+					instruction::Instruction::invalid()
 					},
 				};
 			

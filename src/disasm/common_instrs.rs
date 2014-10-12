@@ -21,18 +21,18 @@ macro_rules! def_instr{
 	impl ::disasm::instruction::InstructionClass for $class
 	{
 		fn name(&self) -> &str { stringify!($name) }
-		fn is_terminal(&self, $params: &[InstrParam]) -> bool {
+		fn is_terminal(&self, $params: &[::disasm::instruction::InstrParam]) -> bool {
 			let _ = $params;
 			$isterm
 		}
-		fn print(&self, $fmt: &mut ::std::fmt::Formatter, $params: &[InstrParam]) -> Result<(),::std::fmt::FormatError> {
+		fn print(&self, $fmt: &mut ::std::fmt::Formatter, $params: &[::disasm::instruction::InstrParam]) -> Result<(),::std::fmt::FormatError> {
 			$print
 		}
-		fn forwards(&self, $state: &mut State, $instr: &::disasm::instruction::Instruction) {
+		fn forwards(&self, $state: &mut ::disasm::state::State, $instr: &::disasm::instruction::Instruction) {
 			let $params = $instr.params();
 			$forwards
 		}
-		fn backwards(&self, $state: &mut State, $instr: &::disasm::instruction::Instruction) {
+		fn backwards(&self, $state: &mut ::disasm::state::State, $instr: &::disasm::instruction::Instruction) {
 			let $params = $instr.params();
 			let _ = $params;
 			let _ = $state;

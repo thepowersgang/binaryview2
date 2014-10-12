@@ -20,6 +20,7 @@ pub struct Instruction
 	params: Vec<InstrParam>,
 	
 	is_target: bool,
+	is_call_target: bool,
 }
 
 /// Instruction parameter
@@ -53,6 +54,10 @@ pub trait InstructionClass
 // --------------------------------------------------------------------
 impl Instruction
 {
+	pub fn invalid() -> Instruction
+	{
+		Instruction::new(0, COND_ALWAYS, InstrSizeNA, &INVALID, vec![])
+	}
 	pub fn new(
 		len: u8,
 		condition: u8,
@@ -70,6 +75,7 @@ impl Instruction
 			class: class,
 			params: params,
 			is_target: false,
+			is_call_target: false,
 		}
 	}
 	pub fn set_addr(&mut self, addr: u64, mode: uint) {
@@ -78,7 +84,13 @@ impl Instruction
 	}
 	pub fn set_target(&mut self) {
 		self.is_target = true;
-	} 
+	}
+	pub fn set_call_target(&mut self) {
+		self.is_call_target = true;
+	}
+	
+	pub fn is_target(&self) -> bool { self.is_target }
+	pub fn is_call_target(&self) -> bool { self.is_call_target }
 	
 	pub fn contains(&self, addr: u64) -> bool {
 		self.base <= addr && addr < self.base + self.len as u64
@@ -143,5 +155,18 @@ impl ::std::fmt::Show for InstrSize
 		}
 	}
 }
+
+def_instr!(INVALID, IClassInvalid, (f,i,p,s) => {
+	{ true };
+	{ write!(f, "--") };
+	{
+		let _ = p;
+		let _ = s;
+	};
+	{
+		let _ = p;
+		let _ = s;
+	};
+})
 
 // vim: ft=rust
