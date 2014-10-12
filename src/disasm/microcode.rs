@@ -44,13 +44,10 @@ def_ucode!(LOAD, UCodeLoad, (state, size, params) => {
 		let val = match size
 			{
 			::disasm::InstrSizeNA => Value::unknown(),
-			::disasm::InstrSize8  => Value::zero_extend::<u8> ( state.read(addr) ),
-			::disasm::InstrSize16 => Value::zero_extend::<u16>( state.read(addr) ),
-			::disasm::InstrSize32 => Value::zero_extend::<u32>( state.read(addr) ),
-			::disasm::InstrSize64 => Value::concat::<u32>(
-				state.read(addr),
-				state.read(addr+Value::known(4))
-				),
+			::disasm::InstrSize8  => state.read::<u8>(addr).zero_extend(),
+			::disasm::InstrSize16 => state.read::<u16>(addr).zero_extend(),
+			::disasm::InstrSize32 => state.read::<u32>(addr).zero_extend(),
+			::disasm::InstrSize64 => state.read::<u64>(addr),	// 64 = native
 			};
 		state.set(params[0], val);
 	};
@@ -93,10 +90,10 @@ def_ucode!(STORE, UCodeStore, (state, size, params) => {
 			let val = match size
 				{
 				::disasm::InstrSizeNA => Value::unknown(),
-				::disasm::InstrSize8  => Value::zero_extend( state.read::<u8>(addr) ),
-				::disasm::InstrSize16 => Value::zero_extend( state.read::<u16>(addr) ),
-				::disasm::InstrSize32 => Value::zero_extend( state.read::<u32>(addr) ),
-				::disasm::InstrSize64 => Value::zero_extend( state.read::<u64>(addr) ),
+				::disasm::InstrSize8  => state.read::<u8> (addr).zero_extend(),
+				::disasm::InstrSize16 => state.read::<u16>(addr).zero_extend(),
+				::disasm::InstrSize32 => state.read::<u32>(addr).zero_extend(),
+				::disasm::InstrSize64 => state.read::<u64>(addr).zero_extend(),
 				};
 			state.set(params[0], val);
 		}

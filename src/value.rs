@@ -70,18 +70,6 @@ impl<T: ValueType> Value<T>
 		}
 	}
 	
-	/// Zero-extend a value to this type
-	pub fn zero_extend<U: ValueType>(val: Value<U>) -> Value<T>
-	{
-		match val
-		{
-		ValueKnown(v) => {
-			let v_u: T = NumCast::from(v).unwrap();
-			ValueKnown(v_u)
-			},
-		ValueUnknown => ValueUnknown,
-		}
-	}
 	/// Concatenate two values into a larger value
 	/// U must be half the size of T
 	pub fn concat<U: ValueType>(left: Value<U>, right: Value<U>) -> Value<T>
@@ -114,6 +102,7 @@ impl<T: ValueType> Value<T>
 		&ValueUnknown => ValueUnknown,
 		}
 	}
+	pub fn zero_extend<U: ValueType>(&self) -> Value<U> { self.truncate() }
 	
 	/// Returns Some(val) if the value is fixed
 	pub fn val_known(&self) -> Option<T>

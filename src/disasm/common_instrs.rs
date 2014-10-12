@@ -123,7 +123,7 @@ fn shl_fwds<T:ValueType>(val: Value<T>, count: uint) -> (Value<u64>,ValueBool)
 	}
 	else {
 		let (extra,res) = val << count;
-		(Value::zero_extend(res), extra.bit(0))
+		(res.zero_extend(), extra.bit(0))
 	}
 }
 
@@ -156,7 +156,7 @@ fn shr_fwds<T:ValueType>(val: Value<T>, c: uint) -> (Value<u64>,ValueBool)
 	}
 	else {
 		let (extra,res) = val >> c as uint;
-		(Value::zero_extend(res), extra.bit(0))
+		(res.zero_extend(), extra.bit(0))
 	}
 }
 
@@ -188,7 +188,7 @@ fn ror_fwds<T:ValueType>(v: Value<T>, c: uint) -> (Value<u64>,)
 	}
 	else {
 		let (extra,res) = v >> c;
-		( Value::zero_extend(res | extra), )
+		( (res | extra).zero_extend(), )
 	}
 }
 
@@ -225,7 +225,7 @@ fn add_fwds<T:ValueType>(a: Value<T>, b: Value<T>, c: ValueBool) -> (Value<u64>,
 	let rv = a + b + carry_in;
 	// TODO: Set flags based on val (requires changing return of "Add<Value>")
 	let co = ::value::ValueBoolUnknown;
-	(Value::zero_extend(rv), co)
+	(rv.zero_extend(), co)
 }
 
 // SUB - Subtraction of two values into a register
@@ -250,7 +250,7 @@ fn sub_fwds<T:ValueType>(a: Value<T>, b: Value<T>, c: ValueBool) -> (Value<u64>,
 	let rv = a - b - borrow;
 	// TODO: Support borrow out
 	let borrow_out = ::value::ValueBoolUnknown;
-	(Value::zero_extend(rv), borrow_out)
+	(rv.zero_extend(), borrow_out)
 }
 
 // AND - bitwise AND of two values into a register
