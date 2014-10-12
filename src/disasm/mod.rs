@@ -1,7 +1,6 @@
 //
 //
 //
-use std::rc::Rc;
 use self::state::State;
 use sortedlist::SortedList;	// Allows treating of collection types as sorted lists
 

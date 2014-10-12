@@ -143,10 +143,11 @@ impl<T: ValueType> Value<T>
 		}
 	}
 	
+	/// Fetch the value of the specified bit
 	pub fn bit(&self, pos: uint) -> ValueBool
 	{
 		let one: T = NumCast::from(1u).unwrap();
-		let mask = one << self.bitsize()-1;
+		let mask = one << pos;
 		match self
 		{
 		&ValueUnknown => ValueBoolUnknown,

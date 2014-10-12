@@ -24,19 +24,7 @@ macro_rules! def_ucode{
 	};
 }
 
-/// Jump - 
-def_ucode!(JUMP, UCodeJump, (state, size, params) => {
-	{
-		let target = state.get( params[0] );
-		let mode = params[1].immediate() as uint;
-		state.add_target( target, mode );	// TODO: Get mode from state
-	};
-	{
-		fail!("Running a jump backwards is impossible");
-	};
-})
-
-def_ucode!(CALL, UCodeCall, (state, size, params) => {
+def_ucode!(CALL, UCodeCall, (state, _size, params) => {
 	{
 		let target = state.get( params[0] );
 		let mode = params[1].immediate() as uint;
@@ -44,7 +32,9 @@ def_ucode!(CALL, UCodeCall, (state, size, params) => {
 		// Clobber all registers
 		state.call_clobber(target, mode);
 	};
-	{ unimplemented!(); };
+	{
+		let _ = params; let _ = state; unimplemented!();
+	};
 })
 
 def_ucode!(LOAD, UCodeLoad, (state, size, params) => {
@@ -69,7 +59,14 @@ def_ucode!(LOAD, UCodeLoad, (state, size, params) => {
 		{
 			let addr = state.get(params[1]);
 			let val = state.get(params[0]);
-			state.write(addr, val);
+			match size
+			{
+			::disasm::InstrSizeNA => {},
+			::disasm::InstrSize8  => state.write(addr, val.truncate::<u8> ()),
+			::disasm::InstrSize16 => state.write(addr, val.truncate::<u16>()),
+			::disasm::InstrSize32 => state.write(addr, val.truncate::<u32>()),
+			::disasm::InstrSize64 => state.write(addr, val.truncate::<u64>()),
+			}
 		}
 		state.set(params[0], Value::unknown());
 	};
@@ -93,28 +90,20 @@ def_ucode!(STORE, UCodeStore, (state, size, params) => {
 		if params[0] != params[1]
 		{
 			let addr = state.get(params[1]);
-			let val = state.read::<u64>(addr);
+			let val = match size
+				{
+				::disasm::InstrSizeNA => Value::unknown(),
+				::disasm::InstrSize8  => Value::zero_extend( state.read::<u8>(addr) ),
+				::disasm::InstrSize16 => Value::zero_extend( state.read::<u16>(addr) ),
+				::disasm::InstrSize32 => Value::zero_extend( state.read::<u32>(addr) ),
+				::disasm::InstrSize64 => Value::zero_extend( state.read::<u64>(addr) ),
+				};
 			state.set(params[0], val);
 		}
 		else
 		{
 			//state.set(params[0], Value::unknown());
 		}
-	};
-})
-
-// Push - Pretty darn simple due to rust
-def_ucode!(PUSH, UCodePush, (state, size, params) => {
-	{
-		let val = state.get(params[0]);
-		// TODO: Should this code handle the stack pointer manipulation?
-		// - Nah, leave that up to the user
-		state.stack_push( val );
-	};
-	{
-		let val = state.stack_pop();
-		state.set(params[0], val);
-		unimplemented!();
 	};
 })
 

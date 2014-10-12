@@ -1,7 +1,7 @@
 //
 //
 //
-use value::{Value,ValueType};
+use value::{Value,ValueBool,ValueType};
 use memory::MemoryStateAccess;
 
 static NUM_TMPREGS: uint = 4;
@@ -24,6 +24,11 @@ pub struct State<'mem>
 	
 	/// List of addresses to be processed on next pass
 	todo_list: Vec<(u64, uint)>,
+	
+	/// Carry flag
+	flag_c: ValueBool,
+	/// Overflow flag
+	flag_v: ValueBool,
 }
 
 enum RunMode
@@ -34,6 +39,12 @@ enum RunMode
 	RunModeBlockify,
 	/// Full memory and stack works
 	RunModeFull,
+}
+
+pub enum StatusFlags
+{
+	FlagCarry,
+	FlagOverflow,
 }
 
 impl<'mem> State<'mem>
@@ -47,7 +58,10 @@ impl<'mem> State<'mem>
 			registers: Vec::from_fn(cpu.num_regs(), |_| Value::unknown()),
 			tmpregs: [Value::unknown(), ..NUM_TMPREGS],
 			stack: Vec::with_capacity(16),
-			todo_list: Vec::new(),
+			todo_list: Vec::new(),	
+			
+			flag_c: ::value::ValueBoolUnknown,
+			flag_v: ::value::ValueBoolUnknown,
 		}
 	}
 
@@ -121,7 +135,7 @@ impl<'mem> State<'mem>
 			else if addr.is_fixed_set()
 			{
 				fail!("TODO: Support generating set of data from read");
-				Value::<T>::unknown()
+				//Value::<T>::unknown()
 			}
 			else
 			{
@@ -148,6 +162,23 @@ impl<'mem> State<'mem>
 		}
 	}
 
+	pub fn flag_set(&mut self, flag: StatusFlags, val: ValueBool)
+	{
+		match flag
+		{
+		FlagCarry    => { self.flag_c = val; },
+		FlagOverflow => { self.flag_v = val; },
+		}
+	}
+	pub fn flag_get(&self, flag: StatusFlags) -> ValueBool
+	{
+		match flag
+		{
+		FlagCarry    => self.flag_c,
+		FlagOverflow => self.flag_v,
+		}
+	}
+	
 	pub fn stack_push(&mut self, val: Value<u64>)
 	{
 		debug!("stack_push({})", val);
@@ -195,6 +226,7 @@ impl<'mem> State<'mem>
 	{
 		if val.is_fixed_set()
 		{
+			warn!("TOOD: Call clobbering {} mode={}", val, mode);
 			//if let Some(f) = state.functions.find( (mode,val
 			//{
 			//}
@@ -214,7 +246,7 @@ impl<'mem> State<'mem>
 	/// Clobber every register
 	pub fn clobber_everything(&mut self)
 	{
-		for r in self.registers.mut_iter()
+		for r in self.registers.iter_mut()
 		{
 			*r = Value::unknown();
 		}

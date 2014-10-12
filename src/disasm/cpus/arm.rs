@@ -7,7 +7,7 @@ use value::{Value,ValueKnown};
 use disasm::common_instrs;
 use disasm::{Instruction,InstructionClass};
 use disasm::{InstrParam,ParamImmediate,ParamTrueReg,ParamTmpReg};
-use disasm::{InstrSizeNA,InstrSize16,InstrSize32};
+use disasm::{InstrSizeNA,InstrSize8,InstrSize16,InstrSize32};
 
 trait BitExtractor {
 	fn bits(&self, base: uint, count: uint) -> Self;
@@ -56,6 +56,7 @@ impl ::disasm::CPU for ArmCpu
 	
 }
 
+#[allow(non_snake_case)]
 /// Disassemble code in ARM mode (32-bits per instruction)
 fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::Instruction,()>
 {
@@ -168,6 +169,7 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::I
 	})
 }
 
+#[allow(non_snake_case)]	// Suppresses warning on Rd/Rn/Rt
 /// Disassemble in THUMB mode
 fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::Instruction,()>
 {
@@ -178,49 +180,49 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 	// Logical Shift Left
 	0x00 ... 0x01 => Instruction::new(
 		2, 0xE, InstrSize32, &common_instrs::SHL,
-		vec![ reg_T(word, 0), reg_T(word, 3), ParamImmediate( word.bits(6,5) as u64) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( word.bits(6,5) as u64) ]
 		),
 	// Logical Shift Right
 	0x02 ... 0x03 => Instruction::new(
 		2, 0xE, InstrSize32, &common_instrs::SHR,
-		vec![ reg_T(word, 0), reg_T(word, 3), ParamImmediate( word.bits(6,5) as u64) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( word.bits(6,5) as u64) ]
 		),
 	// Arithmetic Shift Right
 	0x04 ... 0x05 => Instruction::new(
 		2, 0xE, InstrSize32, &instrs::ASR,
-		vec![ reg_T(word, 0), reg_T(word, 3), ParamImmediate( word.bits(6,5) as u64) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( word.bits(6,5) as u64) ]
 		),
 	// Add/Sub reg
 	0x06 => Instruction::new(
 		2, 0xE, InstrSize32,
 		if (word >> 9) & 1 != 0 { &common_instrs::SUB } else { &common_instrs::ADD },
-		vec![ reg_T(word, 0), reg_T(word, 3), reg_T(word, 6) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), reg_t(word, 6) ]
 		),
 	// Add/Sub imm3
 	0x07 => Instruction::new(
 		2, 0xE, InstrSize32,
 		if (word >> 9) & 1 != 0 { &common_instrs::SUB } else { &common_instrs::ADD },
-		vec![ reg_T(word, 0), reg_T(word, 3), ParamImmediate( ((word >> 6) & 7) as u64 ) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( ((word >> 6) & 7) as u64 ) ]
 		),
 	// MOV Rd, #imm8
 	0x08 ... 0x09 => Instruction::new(
 		2, 0xE, InstrSize32, &common_instrs::MOVE,
-		vec![ reg_T(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
+		vec![ reg_t(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
 		),
 	// CMP Rd, #imm8
 	0x0a ... 0x0b => Instruction::new(
 		2, 0xE, InstrSize32, &common_instrs::SUB,	// < Use SUB and assign to #tr0
-		vec![ ParamTmpReg(0), reg_T(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
+		vec![ ParamTmpReg(0), reg_t(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
 		),
 	// ADD Rd, Rd, #imm8
 	0x0c ... 0x0d => Instruction::new(
 		2, 0xE, InstrSize32, &common_instrs::ADD,
-		vec![ reg_T(8, 3), reg_T(8, 3), ParamImmediate( (word & 0xFF) as u64 ) ]
+		vec![ reg_t(8, 3), reg_t(8, 3), ParamImmediate( (word & 0xFF) as u64 ) ]
 		),
 	// SUB Rd, Rd, #imm8
 	0x0e ... 0x0f => Instruction::new(
 		2, 0xE, InstrSize32, &common_instrs::SUB,
-		vec![ reg_T(8, 3), reg_T(8, 3), ParamImmediate( (word & 0xFF) as u64 ) ]
+		vec![ reg_t(8, 3), reg_t(8, 3), ParamImmediate( (word & 0xFF) as u64 ) ]
 		),
 	// 0x10 - Data Processing (Sect A6-8)
 	0x10 => match (word >> 6) & 0xF
@@ -242,22 +244,22 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 				0xe => &instrs::BIC        as &InstructionClass,
 				_ => fail!("ARM THUMB 0x10:{{0-7,c-e}} Unmatched {}", v)
 				},
-				vec![ reg_T(word, 0), reg_T(word,3), reg_T(word,6) ]
+				vec![ reg_t(word, 0), reg_t(word,3), reg_t(word,6) ]
 			),
 		// - TEST Rt, Rn
 		0x8 => Instruction::new(
 			2, 0xE, InstrSize32, &common_instrs::AND,
-			vec![ ParamTmpReg(0), reg_T(word, 0), reg_T(word,3) ]
+			vec![ ParamTmpReg(0), reg_t(word, 0), reg_t(word,3) ]
 			),
 		// - Reverse Subtract (RSB) (Negate?)
 		0x9 => Instruction::new(
 			2, 0xE, InstrSize32, &common_instrs::SUB,
-			vec![ reg_T(word, 0), ParamImmediate(0), reg_T(word,3) ]
+			vec![ reg_t(word, 0), ParamImmediate(0), reg_t(word,3) ]
 			),
 		// - CMP Rt, Rn
 		0xA => Instruction::new(
 			2, 0xE, InstrSize32, &common_instrs::SUB,
-			vec![ ParamTmpReg(0), reg_T(word, 0), reg_T(word,3) ]
+			vec![ ParamTmpReg(0), reg_t(word, 0), reg_t(word,3) ]
 			),
 		0xB => {
 			error!("ARM THUMB 0x10:B Undefined");
@@ -266,7 +268,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 		// - NOT
 		0xF => Instruction::new(
 			2, 0xE, InstrSize32, &common_instrs::NOT,
-			vec![ reg_T(word, 0), reg_T(word,3) ]
+			vec![ reg_t(word, 0), reg_t(word,3) ]
 			),
 		v @ _ => fail!("ARM THUMB 0x10 Unmatched {:x}", v)
 		},
@@ -278,7 +280,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 		// ADD R, R, R
 		0x0 => Instruction::new(
 			2, 0xE, InstrSize32, &common_instrs::ADD,
-			vec![ reg_T(word, 0), reg_T(word, 3), reg_T(word, 6) ]
+			vec![ reg_t(word, 0), reg_t(word, 3), reg_t(word, 6) ]
 			),
 		// ADD Rd, Rd, Rn (high)
 		0x1 ... 0x3 => {
@@ -327,41 +329,41 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 	// LDR Rt, [PC,#imm8]
 	0x12 ... 0x13 => Instruction::new(
 		2, 0xE, InstrSize32, &common_instrs::LOAD_OFS,
-		vec![ reg_T(word, 0), ParamImmediate((addr + 4) & !3), ParamImmediate( (word.bits(0,8)*4) as u64 ) ]
+		vec![ reg_t(word, 0), ParamImmediate((addr + 4) & !3), ParamImmediate( (word.bits(0,8)*4) as u64 ) ]
 		),
 	// (STR|LDR) Rt, [Rn,#imm5]
 	0x18 ... 0x1B => Instruction::new(
-		2, 0xE, ::disasm::InstrSize32,
+		2, 0xE, InstrSize32,
 		if word.bits(11,1) != 0 { &common_instrs::LOAD_OFS } else { &common_instrs::STORE_OFS },
-		vec![ reg_T(word, 0), reg_T(word, 3), ParamImmediate( (word.bits(6,5) * 4) as u64 ) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( (word.bits(6,5) * 4) as u64 ) ]
 		),
 	// (STR|LDR)B Rt, [Rn,#imm5]
 	0x1C ... 0x1F => Instruction::new(
-		2, 0xE, ::disasm::InstrSize8,
+		2, 0xE, InstrSize8,
 		if word.bits(11,1) != 0 { &common_instrs::LOAD_OFS } else { &common_instrs::STORE_OFS },
-		vec![ reg_T(word, 0), reg_T(word, 3), ParamImmediate( (word.bits(6,5) * 1) as u64 ) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( (word.bits(6,5) * 1) as u64 ) ]
 		),
 	// (STR|LDR)H Rt, [Rn,#imm5]
 	0x20 ... 0x23 => Instruction::new(
-		2, 0xE, ::disasm::InstrSize16,
+		2, 0xE, InstrSize16,
 		if word.bits(11,1) != 0 { &common_instrs::LOAD_OFS } else { &common_instrs::STORE_OFS },
-		vec![ reg_T(word, 0), reg_T(word, 3), ParamImmediate( (word.bits(6,5) * 2) as u64 ) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( (word.bits(6,5) * 2) as u64 ) ]
 		),
 	// (STR|LDR) Rt, [SP,#imm8]
 	0x24 ... 0x27 => Instruction::new(
-		2, 0xE, ::disasm::InstrSize32,
+		2, 0xE, InstrSize32,
 		if word.bits(11,1) != 0 { &common_instrs::LOAD_OFS } else { &common_instrs::STORE_OFS },
-		vec![ reg_T(word, 8), ParamTrueReg(13), ParamImmediate( (word.bits(6,8) * 4) as u64 ) ]
+		vec![ reg_t(word, 8), ParamTrueReg(13), ParamImmediate( (word.bits(6,8) * 4) as u64 ) ]
 		),
 	// ADR Rd, [PC,#imm8]
 	0x28 ... 0x29 => Instruction::new(
-		2, 0xE, ::disasm::InstrSize32, &common_instrs::ADD,
-		vec![ reg_T(word, 8), ParamTrueReg(15), ParamImmediate( (word.bits(6,8) * 4) as u64 ) ]
+		2, 0xE, InstrSize32, &common_instrs::ADD,
+		vec![ reg_t(word, 8), ParamTrueReg(15), ParamImmediate( (word.bits(6,8) * 4) as u64 ) ]
 		),
 	// ADD Rd, SP, #imm8*4
 	0x2A ... 0x2B => Instruction::new(
-		2, 0xE, ::disasm::InstrSize32, &common_instrs::ADD,
-		vec![ reg_T(word, 8), ParamTrueReg(13), ParamImmediate( (word.bits(6,8) * 4) as u64 ) ]
+		2, 0xE, InstrSize32, &common_instrs::ADD,
+		vec![ reg_t(word, 8), ParamTrueReg(13), ParamImmediate( (word.bits(6,8) * 4) as u64 ) ]
 		),
 	// Misc Instructions (A6..2.5)
 	0x2C => match (word >> 5) & 0x1F
@@ -410,12 +412,12 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 	// STM - Store Multiple
 	0x30 ... 0x31 => Instruction::new(
 		2, 0xE, InstrSize32, &instrs::STM,
-		vec![ reg_T(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
+		vec![ reg_t(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
 		),
 	// LDM - Load Multiple
 	0x32 ... 0x33 => Instruction::new(
 		2, 0xE, InstrSize32, &instrs::LDM,
-		vec![ reg_T(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
+		vec![ reg_t(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
 		),
 	// Conditional Branch + Supervisor Call
 	0x34 ... 0x37 => match word.bits(8, 4)
@@ -571,7 +573,7 @@ fn readmem<T: ::value::ValueType+::memory::MemoryStateAccess>(mem: &::memory::Me
 // ---
 fn sign_extend(bits: uint, value: u32) -> u64
 {
-	if( value >> (bits-1) != 0 ) {
+	if value >> (bits-1) != 0 {
 		(value as u64) | ( ::std::u64::MAX << bits )
 	}
 	else {
@@ -590,7 +592,7 @@ fn reg(word: u32, ofs: uint) -> InstrParam
 {
 	ParamTrueReg( ((word >> ofs) & 15) as u8 )
 }
-fn reg_T(word: u16, ofs: uint) -> InstrParam
+fn reg_t(word: u16, ofs: uint) -> InstrParam
 {
 	ParamTrueReg( ((word >> ofs) & 7) as u8 )
 }
@@ -599,7 +601,7 @@ mod instrs
 {
 	use value::Value;
 	use disasm::state::State;
-	use disasm::{InstructionClass,InstrParam};
+	use disasm::{InstrParam};
 
 	// Set system register
 	def_instr!(SET_SREG, InstrSetSReg, (f,instr,p,state) => {
@@ -611,6 +613,7 @@ mod instrs
 				_ => fail!("Invalid type for param[0] of SET_SREG, {}", p[0]),
 				};
 			let val = state.get(p[1]);
+			warn!("TODO: Assign SReg {} value {}", regid, val);
 		};
 		{
 			unimplemented!();

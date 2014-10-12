@@ -10,6 +10,7 @@ use disasm::{InstrSizeNA,InstrSize8,InstrSize16,InstrSize32,InstrSize64};
 use disasm::microcode;
 use disasm::microcode::UCodeOp;
 use disasm::state::State;
+use disasm::state::{FlagCarry};
 use value::{Value,ValueBool,ValueType};
 
 macro_rules! def_instr{
@@ -105,7 +106,7 @@ def_instr!(SHL, IClassShl, (f, instr, params, state) => {
 		{
 			let (ov,cf) = size_call!( instr.opsize(), shl_fwds(v.truncate(), c as uint) );
 			state.set(params[0], ov);
-			//state.set_flag(FlagCarry, cf);
+			state.flag_set(FlagCarry, cf);
 		}
 		else
 		{
@@ -122,7 +123,7 @@ fn shl_fwds<T:ValueType>(val: Value<T>, count: uint) -> (Value<u64>,ValueBool)
 	}
 	else {
 		let (extra,res) = val << count;
-		(Value::zero_extend(val), extra.bit(0))
+		(Value::zero_extend(res), extra.bit(0))
 	}
 }
 
@@ -141,13 +142,14 @@ def_instr!(SHR, IClassShr, (f, instr, params, state) => {
 			else {
 				let (extra,res) = v >> c as uint;
 				state.set(params[0], res);
-				//state.set_flag(FlagCarry, extra & Value::known(1))
+				state.flag_set(FlagCarry, extra.bit(0));
 			}
 		}
 		else
 		{
 			warn!("TODO: SHL by a set/range of values");
 			state.set(params[0], Value::unknown());
+			state.flag_set(FlagCarry, ::value::ValueBoolUnknown);
 		}
 	};
 	{ unimplemented!(); };
@@ -187,7 +189,13 @@ def_instr!(ADD, IClassAdd, (f, instr, params, state) => {
 	{ false };
 	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
 	{
-		let val = state.get(params[1]) + state.get(params[2]);
+		let carry_in = match state.flag_get(::disasm::state::FlagCarry)
+			{
+			::value::ValueBoolUnknown => Value::unknown(),
+			::value::ValueBoolTrue  => Value::known(1),
+			::value::ValueBoolFalse => Value::known(0),
+			};
+		let val = state.get(params[1]) + state.get(params[2]) + carry_in;
 		state.set(params[0], val);
 		// TODO: Set flags based on val
 	};
