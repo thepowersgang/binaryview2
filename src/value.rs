@@ -9,6 +9,7 @@
 use std::num::Zero;
 use std::fmt::LowerHex;
 
+/// Trait for valid values in a value (only implemented for unsigned sized integers)
 pub trait ValueType : Int + Unsigned + Zero + LowerHex { }
 impl ValueType for u8 {}
 impl ValueType for u16 {}
@@ -22,8 +23,12 @@ pub enum Value<T: ValueType>
 	ValueUnknown,
 	ValueKnown(T),
 	// TODO: Support value sets
+	//ValueSet(Rc<Vec<T>>),
 	// TODO: Support range+mask (or similar)
+	//ValueMasked(T,T),	// (Value,KnownFlag)
 	// TODO: Support multi-state, e.g. Unknown or a set of possible values
+	// - That would be messy to work with, and probably not needed?
+	//ValueNested(Rc<Vec<Value<T>>>),
 }
 
 pub enum ValueBool
@@ -41,22 +46,38 @@ struct ValuePossibilities<'a,T:ValueType+'static>
 
 impl<T: ValueType> Value<T>
 {
+	// ---
+	// Type constructors
+	// ---
+	/// Completely unknown value
 	pub fn unknown() -> Value<T> {
 		ValueUnknown
 	}
+	/// Fully known value
 	pub fn known(val: T) -> Value<T> {
 		ValueKnown(val)
 	}
+	/// Fully known zero (shortcut)
 	pub fn zero() -> Value<T> {
 		ValueKnown( Zero::zero() )
 	}
+	/// Fully known negative one (shortcut)
 	pub fn ones() -> Value<T> {
 		let bs = ::std::mem::size_of::<T>() * 8;
 		let top: T = NumCast::from( 1u64 << (bs-1) ).unwrap();
 		let v = top | (!top);
 		ValueKnown( v )
 	}
-	pub fn cast<U: ValueType>(val: U) -> T {
+	//// A set of possible values
+	//pub fn set(vals: Vec<T>) -> Value<T> {
+	//	ValueSet(Rc::new(vals))
+	//}
+	
+	// ---
+	// Conversions
+	// ---
+	/// (internal) Cast from one type to another
+	fn cast<U: ValueType>(val: U) -> T {
 		match NumCast::from(val)
 		{
 		Some(v) => v,
@@ -86,6 +107,7 @@ impl<T: ValueType> Value<T>
 		}
 	}
 	
+	/// Return the number of bits in the type
 	pub fn bitsize(&self) -> uint {
 		::std::mem::size_of::<T>() * 8
 	}
