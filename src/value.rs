@@ -63,22 +63,34 @@ impl<T: ValueType> Value<T>
 	}
 	/// Fully known negative one (shortcut)
 	pub fn ones() -> Value<T> {
-		let bs = ::std::mem::size_of::<T>() * 8;
-		let top: T = NumCast::from( 1u64 << (bs-1) ).unwrap();
-		let v = top | (!top);
-		ValueKnown( v )
+		ValueKnown( Value::<T>::ones_raw() )
 	}
 	//// A set of possible values
 	//pub fn set(vals: Vec<T>) -> Value<T> {
 	//	ValueSet(Rc::new(vals))
 	//}
 	
+	fn ones_raw() -> T {
+		let bs = ::std::mem::size_of::<T>() * 8;
+		let top: T = NumCast::from( 1u64 << (bs-1) ).unwrap();
+		top | (!top)
+	}
+	
+	fn _bitsize() -> uint {
+		::std::mem::size_of::<T>() * 8
+	}
+	
 	// ---
 	// Conversions
 	// ---
 	/// (internal) Cast from one type to another
 	fn cast<U: ValueType>(val: U) -> T {
-		match NumCast::from(val)
+		let mask = if Value::<T>::_bitsize() < Value::<U>::_bitsize() {
+				NumCast::from( Value::<T>::ones_raw() ).unwrap()
+			} else {
+				Value::<U>::ones_raw()
+			};
+		match NumCast::from(val & mask)
 		{
 		Some(v) => v,
 		None => unsafe {

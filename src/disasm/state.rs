@@ -3,6 +3,7 @@
 //
 use value::{Value,ValueBool,ValueType};
 use memory::MemoryStateAccess;
+use disasm::instruction::{InstrParam,ParamTrueReg,ParamTmpReg,ParamImmediate};
 
 static NUM_TMPREGS: uint = 4;
 
@@ -71,25 +72,25 @@ impl<'mem> State<'mem>
 	}
 	
 	/// Execute a single instruction
-	pub fn run(&mut self, instr: &::disasm::Instruction)
+	pub fn run(&mut self, instr: &::disasm::instruction::Instruction)
 	{
 		instr.class.forwards(self, instr);
 	}
 	
 	/// Get the value of a parameter (register)
-	pub fn get(&mut self, param: ::disasm::InstrParam) -> Value<u64>
+	pub fn get(&mut self, param: InstrParam) -> Value<u64>
 	{
 		let v = match param
 			{
-			::disasm::ParamTrueReg(r) => {
+			ParamTrueReg(r) => {
 				assert!( (r as uint) < self.registers.len() );
 				self.registers[r as uint]
 				},
-			::disasm::ParamTmpReg(r) => {
+			ParamTmpReg(r) => {
 				assert!( (r as uint) < NUM_TMPREGS );
 				self.tmpregs[r as uint]
 				},
-			::disasm::ParamImmediate(v) => {
+			ParamImmediate(v) => {
 				Value::known(v)
 				},
 			};
@@ -97,21 +98,21 @@ impl<'mem> State<'mem>
 		v
 	}
 	/// Set the value of a parameter (register)
-	pub fn set(&mut self, param: ::disasm::InstrParam, val: Value<u64>)
+	pub fn set(&mut self, param: InstrParam, val: Value<u64>)
 	{
 		debug!("set({} = {})", param, val);
 		match param
 		{
-		::disasm::ParamTrueReg(r) => {
+		ParamTrueReg(r) => {
 			assert!( (r as uint) < self.registers.len() );
 			(*self.registers.get_mut(r as uint)) = val;
 			//self.registers[r as uint] = val;
 			},
-		::disasm::ParamTmpReg(r) => {
+		ParamTmpReg(r) => {
 			assert!( (r as uint) < NUM_TMPREGS );
 			self.tmpregs[r as uint] = val;
 			},
-		::disasm::ParamImmediate(_) => fail!("Setting an immediate"),
+		ParamImmediate(_) => fail!("Setting an immediate"),
 		}
 	}
 	

@@ -4,11 +4,11 @@
 // disam/cpus/arm.rs
 // - Recent ARM CPU disassembly (written against ARMv5)
 use value::{Value,ValueKnown};
-use disasm::COND_ALWAYS;
 use disasm::common_instrs;
-use disasm::{Instruction,InstructionClass};
-use disasm::{InstrParam,ParamImmediate,ParamTrueReg,ParamTmpReg};
-use disasm::{InstrSizeNA,InstrSize8,InstrSize16,InstrSize32};
+use disasm::instruction::COND_ALWAYS;
+use disasm::instruction::{Instruction,InstructionClass};
+use disasm::instruction::{InstrParam,ParamImmediate,ParamTrueReg,ParamTmpReg};
+use disasm::instruction::{InstrSizeNA,InstrSize8,InstrSize16,InstrSize32};
 
 trait BitExtractor {
 	fn bits(&self, base: uint, count: uint) -> Self;
@@ -42,10 +42,10 @@ impl ::disasm::CPU for ArmCpu
 			1 => addr + 4 + 1,	// THUMB mode
 			_ => fail!("Invalid ARM mode"),
 			};
-		state.set( ::disasm::ParamTrueReg(15), Value::known(pc_val) );
+		state.set( ParamTrueReg(15), Value::known(pc_val) );
 	}
 	
-	fn disassemble(&self, mem: &::memory::MemoryState, addr: u64, mode: uint) -> Result<::disasm::Instruction,()>
+	fn disassemble(&self, mem: &::memory::MemoryState, addr: u64, mode: uint) -> Result<Instruction,()>
 	{
 		match mode
 		{
@@ -59,7 +59,7 @@ impl ::disasm::CPU for ArmCpu
 
 #[allow(non_snake_case)]
 /// Disassemble code in ARM mode (32-bits per instruction)
-fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::Instruction,()>
+fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<Instruction,()>
 {
 	let word = try!(readmem::<u32>(mem, addr));
 
@@ -179,7 +179,7 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::I
 
 #[allow(non_snake_case)]	// Suppresses warning on Rd/Rn/Rt
 /// Disassemble in THUMB mode
-fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm::Instruction,()>
+fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instruction,()>
 {
 	let word = try!(readmem::<u16>(mem, addr));
 
@@ -210,7 +210,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 	0x07 => Instruction::new(
 		2, COND_ALWAYS, InstrSize32,
 		if (word >> 9) & 1 != 0 { &common_instrs::SUB } else { &common_instrs::ADD },
-		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( ((word >> 6) & 7) as u64 ) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( word.bits(6,3) as u64 ) ]
 		),
 	// MOV Rd, #imm8
 	0x08 ... 0x09 => Instruction::new(
@@ -225,12 +225,12 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 	// ADD Rd, Rd, #imm8
 	0x0c ... 0x0d => Instruction::new(
 		2, COND_ALWAYS, InstrSize32, &common_instrs::ADD,
-		vec![ reg_t(8, 3), reg_t(8, 3), ParamImmediate( (word & 0xFF) as u64 ) ]
+		vec![ reg_t(word,8), reg_t(word,8), ParamImmediate( (word & 0xFF) as u64 ) ]
 		),
 	// SUB Rd, Rd, #imm8
 	0x0e ... 0x0f => Instruction::new(
 		2, COND_ALWAYS, InstrSize32, &common_instrs::SUB,
-		vec![ reg_t(8, 3), reg_t(8, 3), ParamImmediate( (word & 0xFF) as u64 ) ]
+		vec![ reg_t(word,8), reg_t(word,8), ParamImmediate( (word & 0xFF) as u64 ) ]
 		),
 	// 0x10 - Data Processing (Sect A6-8)
 	0x10 => match (word >> 6) & 0xF
@@ -252,7 +252,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<::disasm:
 				0xe => &instrs::BIC        as &InstructionClass,
 				_ => fail!("ARM THUMB 0x10:{{0-7,c-e}} Unmatched {}", v)
 				},
-				vec![ reg_t(word, 0), reg_t(word,3), reg_t(word,6) ]
+				vec![ reg_t(word, 0), reg_t(word,0), reg_t(word,3) ]
 			),
 		// - TEST Rt, Rn
 		0x8 => Instruction::new(
@@ -609,7 +609,7 @@ mod instrs
 {
 	use value::Value;
 	use disasm::state::State;
-	use disasm::{InstrParam};
+	use disasm::instruction::{InstrParam,ParamImmediate,ParamTrueReg};
 
 	// Set system register
 	def_instr!(SET_SREG, InstrSetSReg, (f,instr,p,state) => {
@@ -617,7 +617,7 @@ mod instrs
 		{ write!(f, "SR{} {} {}", p[0], p[1], p[2]) };
 		{
 			let regid = match p[0] {
-				::disasm::ParamImmediate(v) => v,
+				ParamImmediate(v) => v,
 				_ => fail!("Invalid type for param[0] of SET_SREG, {}", p[0]),
 				};
 			let val = state.get(p[1]);
@@ -700,7 +700,7 @@ mod instrs
 			for i in range(0,16).rev() {
 				if mask & 1 << i != 0 {
 					// TODO: Decrement stack pointer
-					let val = state.get( ::disasm::ParamTrueReg(i as u8) );
+					let val = state.get( ParamTrueReg(i as u8) );
 					state.stack_push( val );
 				}
 			}
@@ -734,7 +734,7 @@ mod instrs
 				if mask & 1 << i != 0 {
 					// TODO: Decrement stack pointer
 					let val = state.stack_pop();
-					state.set( ::disasm::ParamTrueReg(i as u8), val );
+					state.set( ParamTrueReg(i as u8), val );
 				}
 			}
 		};
@@ -763,7 +763,7 @@ mod instrs
 			debug!("mask={:x}", mask);
 			for i in range(0,16).rev() {
 				if mask & 1 << i != 0 {
-					let val = state.get( ::disasm::ParamTrueReg(i as u8) );
+					let val = state.get( ParamTrueReg(i as u8) );
 					state.write(addr, val);
 					// TODO: Support alternate types of STM
 					addr = addr + Value::known(4);
@@ -797,7 +797,7 @@ mod instrs
 			for i in range(0,16).rev() {
 				if mask & 1 << i != 0 {
 					let val = state.read(addr);
-					state.set( ::disasm::ParamTrueReg(i as u8), val );
+					state.set( ParamTrueReg(i as u8), val );
 					// TODO: Support alternate types of LDM
 					addr = addr + Value::known(4);
 				}

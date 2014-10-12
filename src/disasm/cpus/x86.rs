@@ -2,6 +2,7 @@
 //
 //
 use value::{ValueKnown};
+use disasm::instruction::Instruction;
 
 struct Intel32CPU;
 
@@ -16,7 +17,7 @@ impl ::disasm::CPU for Intel32CPU
 		// X86 doesn't need any pre-instruction prep
 	}
 	
-	fn disassemble(&self, mem: &::memory::MemoryState, addr: u64, mode: uint) -> Result<::disasm::Instruction,()>
+	fn disassemble(&self, mem: &::memory::MemoryState, addr: u64, mode: uint) -> Result<Instruction,()>
 	{
 		assert!( mode == 0 );
 		let val = match mem.read_u8(addr)

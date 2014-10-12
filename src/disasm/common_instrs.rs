@@ -4,9 +4,9 @@
 // disasm/common_instrs.rs
 // - Common generic instructions
 #![macro_escape]
-use disasm::InstructionClass;
-use disasm::{InstrParam,ParamTmpReg,ParamImmediate};
-use disasm::{InstrSizeNA,InstrSize8,InstrSize16,InstrSize32,InstrSize64};
+use disasm::instruction::InstructionClass;
+use disasm::instruction::{InstrParam,ParamTmpReg,ParamImmediate};
+use disasm::instruction::{InstrSizeNA,InstrSize8,InstrSize16,InstrSize32,InstrSize64};
 use disasm::microcode;
 use disasm::microcode::UCodeOp;
 use disasm::state::State;
@@ -18,7 +18,7 @@ macro_rules! def_instr{
 	=> {
 	struct $class;
 	pub static $name: $class = $class;
-	impl ::disasm::InstructionClass for $class
+	impl ::disasm::instruction::InstructionClass for $class
 	{
 		fn name(&self) -> &str { stringify!($name) }
 		fn is_terminal(&self, $params: &[InstrParam]) -> bool {
@@ -28,11 +28,11 @@ macro_rules! def_instr{
 		fn print(&self, $fmt: &mut ::std::fmt::Formatter, $params: &[InstrParam]) -> Result<(),::std::fmt::FormatError> {
 			$print
 		}
-		fn forwards(&self, $state: &mut State, $instr: &::disasm::Instruction) {
+		fn forwards(&self, $state: &mut State, $instr: &::disasm::instruction::Instruction) {
 			let $params = $instr.params();
 			$forwards
 		}
-		fn backwards(&self, $state: &mut State, $instr: &::disasm::Instruction) {
+		fn backwards(&self, $state: &mut State, $instr: &::disasm::instruction::Instruction) {
 			let $params = $instr.params();
 			let _ = $params;
 			let _ = $state;
@@ -331,7 +331,7 @@ def_instr!(LOAD_OFS, IClassLoadOfs, (f, instr, params, state) => {
 	{
 		let addr = state.get(params[1]) + state.get(params[2]);
 		state.set( ParamTmpReg(0), addr );
-		microcode::LOAD.forwards(state, ::disasm::InstrSize32, [params[0], ParamTmpReg(0)]);
+		microcode::LOAD.forwards(state, instr.opsize(), [params[0], ParamTmpReg(0)]);
 	};
 	{
 		if params[0] != params[1] && params[0] != params[2]
@@ -339,7 +339,7 @@ def_instr!(LOAD_OFS, IClassLoadOfs, (f, instr, params, state) => {
 			let addr = state.get(params[1]) + state.get(params[2]);
 			state.set( ParamTmpReg(0), addr );
 		}
-		microcode::LOAD.backwards(state, ::disasm::InstrSize32, [params[0], ParamTmpReg(0)]);
+		microcode::LOAD.backwards(state, instr.opsize(), [params[0], ParamTmpReg(0)]);
 	};
 })
 
@@ -350,7 +350,7 @@ def_instr!(STORE_OFS, IClassStoreOfs, (f, instr, params, state) => {
 	{
 		let addr = state.get(params[1]) + state.get(params[2]);
 		state.set( ParamTmpReg(0), addr );
-		microcode::STORE.forwards(state, ::disasm::InstrSize32, [params[0], ParamTmpReg(0)]);
+		microcode::STORE.forwards(state, instr.opsize(), [params[0], ParamTmpReg(0)]);
 	};
 	{
 		let addr = if params[0] != params[1] && params[0] != params[2] {
@@ -360,7 +360,7 @@ def_instr!(STORE_OFS, IClassStoreOfs, (f, instr, params, state) => {
 				Value::unknown()
 			};
 		state.set(ParamTmpReg(0), addr);
-		microcode::STORE.backwards(state, ::disasm::InstrSize32, [params[0], ParamTmpReg(0)]);
+		microcode::STORE.backwards(state, instr.opsize(), [params[0], ParamTmpReg(0)]);
 	};
 })
 
