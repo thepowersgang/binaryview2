@@ -173,11 +173,11 @@ pub fn parse_typemap(typemap: &mut ::types::TypeMap, path: &str) -> Result<(),St
 					flds.push( (fldname, fldtype) );
 				}
 				assert_token!( lexer::TokNewline = try!(get_tok(&mut lex)) );
-				// Create!
-				let mut newstruct = match typemap.new_struct(name.as_slice())
+				// Create the structure
+				let newstruct: &mut _ = match typemap.new_struct(name.as_slice())
 					{
 					Ok(s) => s,
-					Err(_) => return Err( format!("Duplicate struct definition") ),
+					Err(_) => return Err( format!("Duplicate definition of structure '{}'", name) ),
 					};
 				for (fldname, fldtype) in flds.into_iter() {
 					newstruct.append_field(fldname, fldtype);
