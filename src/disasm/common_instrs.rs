@@ -136,14 +136,9 @@ def_instr!(SHR, IClassShr, (f, instr, params, state) => {
 		let count = state.get(params[2]);
 		if let Some(c) = count.val_known()
 		{
-			if c >= v.bitsize() as u64 {
-				state.set(params[0], Value::known(0));
-			}
-			else {
-				let (extra,res) = v >> c as uint;
-				state.set(params[0], res);
-				state.flag_set(FlagCarry, extra.bit(0));
-			}
+			let (res, cf) = size_call!( instr.opsize(), shr_fwds(v.truncate(), c as uint) );
+			state.set(params[0], res);
+			state.flag_set(FlagCarry, cf);
 		}
 		else
 		{
@@ -154,6 +149,16 @@ def_instr!(SHR, IClassShr, (f, instr, params, state) => {
 	};
 	{ unimplemented!(); };
 })
+fn shr_fwds<T:ValueType>(val: Value<T>, c: uint) -> (Value<u64>,ValueBool)
+{
+	if c > val.bitsize() {
+		(Value::known(0), ::value::ValueBoolFalse)
+	}
+	else {
+		let (extra,res) = val >> c as uint;
+		(Value::zero_extend(res), extra.bit(0))
+	}
+}
 
 
 // ROR - Bitwise Rotate Right
@@ -165,58 +170,88 @@ def_instr!(ROR, IClassRor, (f, instr, params, state) => {
 		let count = state.get(params[2]);
 		if let Some(c) = count.val_known()
 		{
-			if c >= v.bitsize() as u64 {
-				state.set(params[0], Value::known(0));
-			}
-			else {
-				let (extra,res) = v >> c as uint;
-				//let (_,high) = v << c as uint
-				state.set(params[0], res | extra);
-				//state.set_flag(FlagCarry, extra & Value::known(1))
-			}
+			let (res, ) = size_call!( instr.opsize(), ror_fwds(v.truncate(), c as uint) );
+			state.set(params[0], res);
 		}
 		else
 		{
-			warn!("TODO: SHL by a set/range of values");
+			warn!("TODO: ROR by a set/range of values");
 			state.set(params[0], Value::unknown());
 		}
 	};
 	{ unimplemented!(); };
 })
+fn ror_fwds<T:ValueType>(v: Value<T>, c: uint) -> (Value<u64>,)
+{
+	if c >= v.bitsize() {
+		(Value::known(0), )
+	}
+	else {
+		let (extra,res) = v >> c;
+		( Value::zero_extend(res | extra), )
+	}
+}
 
+fn carry_val<T:ValueType>(c: ValueBool) -> Value<T>
+{
+	match c
+	{
+	// TODO: Convert unknown into a two value set
+	::value::ValueBoolUnknown => Value::unknown(),
+	// NOTE: .truncate() can zero extend too
+	::value::ValueBoolTrue  => Value::known(1u64).truncate(),
+	::value::ValueBoolFalse => Value::known(0u64).truncate(),
+	}
+}
 // ADD - Addition of two values into a register
 def_instr!(ADD, IClassAdd, (f, instr, params, state) => {
 	{ false };
 	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
 	{
-		let carry_in = match state.flag_get(::disasm::state::FlagCarry)
-			{
-			::value::ValueBoolUnknown => Value::unknown(),
-			::value::ValueBoolTrue  => Value::known(1),
-			::value::ValueBoolFalse => Value::known(0),
-			};
-		let val = state.get(params[1]) + state.get(params[2]) + carry_in;
+		let a = state.get(params[1]);
+		let b = state.get(params[2]);
+		let ci = state.flag_get(::disasm::state::FlagCarry);
+		let (val, cf) = size_call!( instr.opsize(), add_fwds(a.truncate(), b.truncate(), ci) );
 		state.set(params[0], val);
-		// TODO: Set flags based on val
+		state.flag_set(::disasm::state::FlagCarry, cf);
 	};
 	{
 		unimplemented!();
 	};
 })
+fn add_fwds<T:ValueType>(a: Value<T>, b: Value<T>, c: ValueBool) -> (Value<u64>, ValueBool)
+{
+	let carry_in = carry_val(c);
+	let rv = a + b + carry_in;
+	// TODO: Set flags based on val (requires changing return of "Add<Value>")
+	let co = ::value::ValueBoolUnknown;
+	(Value::zero_extend(rv), co)
+}
 
 // SUB - Subtraction of two values into a register
 def_instr!(SUB, IClassSub, (f, instr, params, state) => {
 	{ false };
 	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
 	{
-		let val = state.get(params[1]) - state.get(params[2]);
+		let a = state.get(params[1]);
+		let b = state.get(params[2]);
+		let ci = state.flag_get(::disasm::state::FlagCarry);
+		let (val, borrowed) = size_call!( instr.opsize(), sub_fwds(a.truncate(), b.truncate(), ci) );
 		state.set(params[0], val);
-		// TODO: Set flags based on val
+		state.flag_set(::disasm::state::FlagCarry, borrowed);
 	};
 	{
 		unimplemented!();
 	};
 })
+fn sub_fwds<T:ValueType>(a: Value<T>, b: Value<T>, c: ValueBool) -> (Value<u64>, ValueBool)
+{
+	let borrow = carry_val(c);
+	let rv = a - b - borrow;
+	// TODO: Support borrow out
+	let borrow_out = ::value::ValueBoolUnknown;
+	(Value::zero_extend(rv), borrow_out)
+}
 
 // AND - bitwise AND of two values into a register
 def_instr!(AND, IClassAnd, (f, instr, params, state) => {
@@ -225,7 +260,7 @@ def_instr!(AND, IClassAnd, (f, instr, params, state) => {
 	{
 		let val = state.get(params[1]) & state.get(params[2]);
 		state.set(params[0], val);
-		// TODO: Set flags based on val
+		// TODO: Set flags based on val (e.g. ZF)
 	};
 	{
 		unimplemented!();
