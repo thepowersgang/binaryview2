@@ -25,19 +25,6 @@ macro_rules! def_ucode{
 	};
 }
 
-def_ucode!(CALL, UCodeCall, (state, _size, params) => {
-	{
-		let target = state.get( params[0] );
-		let mode = params[1].immediate() as uint;
-		state.add_target( target, mode );	// TODO: Get mode from state
-		// Clobber all registers
-		state.call_clobber(target, mode);
-	};
-	{
-		let _ = params; let _ = state; unimplemented!();
-	};
-})
-
 def_ucode!(LOAD, UCodeLoad, (state, size, params) => {
 	{
 		let addr = state.get(params[1]);

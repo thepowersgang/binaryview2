@@ -649,11 +649,11 @@ mod instrs
 			let mode = addr & Value::known(1);
 			if mode == Value::known(1)
 			{
-				state.add_target(addr & Value::known(!1), 1)
+				state.jump(addr & Value::known(!1), 1)
 			}
 			else if mode == Value::known(0)
 			{
-				state.add_target(addr & Value::known(!1), 0)
+				state.jump(addr & Value::known(!1), 0)
 			}
 			else
 			{

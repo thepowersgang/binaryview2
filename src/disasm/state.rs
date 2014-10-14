@@ -24,7 +24,7 @@ pub struct State<'mem>
 	stack: Vec<Value<u64>>,
 	
 	/// List of addresses to be processed on next pass
-	todo_list: Vec<(u64, uint)>,
+	todo_list: Vec<((u64, uint), bool)>,
 	
 	/// Carry flag
 	flag_c: ValueBool,
@@ -67,8 +67,11 @@ impl<'mem> State<'mem>
 	}
 
 	/// Retrive the contents of the todo list
-	pub fn todo_list(&self) -> &[(u64,uint)] {
+	pub fn todo_list(&self) -> &[((u64,uint),bool)] {
 		self.todo_list.as_slice()
+	}
+	pub fn clear_todo_list(&mut self) {
+		self.todo_list.clear()
 	}
 	
 	/// Execute a single instruction
@@ -157,7 +160,8 @@ impl<'mem> State<'mem>
 			// Requirements:
 			// - Store locally a set of changes applied by this state
 			//  > Read should query this first.
-			// - This list is accessed by disasm code and applied to main memory as a value set once state is destroyed
+			// - This list is accessed by disasm code and applied to main
+			//   memory as a value set once state is destroyed.
 			},
 		_ => {},
 		}
@@ -211,23 +215,27 @@ impl<'mem> State<'mem>
 	}
 
 	/// Add an address to be processed	
-	pub fn add_target(&mut self, val: Value<u64>, mode: uint)
+	pub fn jump(&mut self, val: Value<u64>, mode: uint)
 	{
-		debug!("add_target({}, mode={})", val, mode);
+		debug!("jump({}, mode={})", val, mode);
 		if val.is_fixed_set()
 		{
-			for i in val.possibilities()
+			for addr in val.possibilities()
 			{
-				self.todo_list.push( (i,mode) );
+				self.todo_list.push( ((addr,mode),false) );
 			}
 		}
 	}
 	
-	pub fn call_clobber(&mut self, val: Value<u64>, mode: uint)
+	pub fn call(&mut self, val: Value<u64>, mode: uint)
 	{
 		if val.is_fixed_set()
 		{
-			warn!("TOOD: Call clobbering {} mode={}", val, mode);
+			for addr in val.possibilities()
+			{
+				self.todo_list.push( ((addr,mode),true) );
+			}
+			warn!("TODO: Call clobbering {} mode={}", val, mode);
 			//if let Some(f) = state.functions.find( (mode,val
 			//{
 			//}

@@ -92,7 +92,7 @@ fn main()
 		// - Convert the current queue of "to-process" addresses (jump and call targets)
 		cont |= disasm.convert_queue() > 0;
 		// - Determine code blocks (and methods)
-		//cont |= disasm.blockify() > 0;
+		cont |= disasm.pass_blockify() > 0;
 		// - Acquire clobber lists for methods
 		//  > Scan methods from leaf methods first (loops handled somehow?)
 		// - Determine value ranges
@@ -105,6 +105,21 @@ fn main()
 	debug!("TOTALS:");
 	debug!(" Pass Count = {}", pass_count);
 	debug!(" Instruction Count = {}", disasm.instr_count());
+	let mut stdout = WriterWrapper(::std::io::stdout());
+	disasm.dump( &mut stdout );
+}
+
+struct WriterWrapper<T:Writer>(T);
+
+impl<T:Writer> ::std::fmt::FormatWriter for WriterWrapper<T> {
+	fn write(&mut self, bytes: &[u8]) -> Result<(), ::std::fmt::FormatError> {
+		let &WriterWrapper(ref mut w) = self;
+		match w.write(bytes)
+		{
+		Ok(_) => Ok( () ),
+		Err(_) => Err( ::std::fmt::WriteError ),
+		}
+	}
 }
 
 // vim: ft=rust

@@ -62,7 +62,7 @@ def_instr!(JUMP, IClassJump, (f,instr,p,state) => {
 	{ write!(f, "{}", p[0]) };
 	{
 		let target = state.get( p[0] );
-		state.add_target( target, instr.mode() );
+		state.jump( target, instr.mode() );
 	};
 	{ fail!("Can't reverse a JUMP"); };
 })
@@ -73,7 +73,8 @@ def_instr!(CALL, IClassCall, (f,instr,p,state) => {
 	{ false };
 	{ write!(f, "{}", p[0]) };
 	{
-		microcode::CALL.forwards(state, InstrSizeNA, [p[0], ParamImmediate(instr.mode() as u64)]);
+		let target = state.get( p[0] );
+		state.call(target, instr.mode());
 	};
 	{
 		fail!("TODO: CALL.backwards");
