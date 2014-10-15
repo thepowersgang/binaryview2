@@ -99,7 +99,6 @@ impl<'a> Disassembled<'a>
 	pub fn pass_blockify(&mut self) -> uint
 	{
 		info!("pass_blockify()");
-		let mut call_targets = ::std::collections::treemap::TreeSet::new();
 		let mut count = 0u;
 		let mut state = State::null(self.cpu, self.memory);
 		let mut block = Block::new_rc(0,0);
@@ -128,7 +127,6 @@ impl<'a> Disassembled<'a>
 				for &(target, iscall) in state.todo_list().iter()
 				{
 					if iscall {
-						call_targets.insert( target );
 					}
 					else {
 						was_jump = true;
@@ -168,6 +166,12 @@ impl<'a> Disassembled<'a>
 		assert!( ::std::rc::is_unique(&block) || count > 0 );
 		
 		count
+	}
+	
+	/// Determine the calling convention for methods
+	pub fn pass_callingconv(&mut self) -> uint
+	{
+		0
 	}
 	
 	/// Disassemble starting from a given address

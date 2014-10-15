@@ -15,21 +15,12 @@ pub struct State<'mem>
 	
 	/// Reference to system memory
 	memory: &'mem ::memory::MemoryState,
-	/// Real registers - Static vector
-	registers: Vec<Value<u64>>,
-	/// Temporary registers
-	tmpregs: [Value<u64>,..NUM_TMPREGS],
-	
-	/// Stack - Dynamic vector
-	stack: Vec<Value<u64>>,
 	
 	/// List of addresses to be processed on next pass
 	todo_list: Vec<((u64, uint), bool)>,
-	
-	/// Carry flag
-	flag_c: ValueBool,
-	/// Overflow flag
-	flag_v: ValueBool,
+
+	/// State data (flags, registers)
+	data: StateData,
 }
 
 enum RunMode
@@ -40,6 +31,23 @@ enum RunMode
 	RunModeBlockify,
 	/// Full memory and stack works
 	RunModeFull,
+}
+
+/// State data (stored separately to allow saving)
+struct StateData
+{
+	/// Real registers - Static vector
+	registers: Vec<Value<u64>>,
+	/// Temporary registers
+	tmpregs: [Value<u64>,..NUM_TMPREGS],
+	
+	/// Stack - Dynamic vector
+	stack: Vec<Value<u64>>,
+	
+	/// Carry flag
+	flag_c: ValueBool,
+	/// Overflow flag
+	flag_v: ValueBool,
 }
 
 pub enum StatusFlags
@@ -56,13 +64,8 @@ impl<'mem> State<'mem>
 		State {
 			mode: RunModeParse,	// TODO: Receive as an argument
 			memory: mem,
-			registers: Vec::from_fn(cpu.num_regs(), |_| Value::unknown()),
-			tmpregs: [Value::unknown(), ..NUM_TMPREGS],
-			stack: Vec::with_capacity(16),
+			data: StateData::new(cpu),
 			todo_list: Vec::new(),	
-			
-			flag_c: ::value::ValueBoolUnknown,
-			flag_v: ::value::ValueBoolUnknown,
 		}
 	}
 
@@ -86,12 +89,12 @@ impl<'mem> State<'mem>
 		let v = match param
 			{
 			ParamTrueReg(r) => {
-				assert!( (r as uint) < self.registers.len() );
-				self.registers[r as uint]
+				assert!( (r as uint) < self.data.registers.len() );
+				self.data.registers[r as uint]
 				},
 			ParamTmpReg(r) => {
 				assert!( (r as uint) < NUM_TMPREGS );
-				self.tmpregs[r as uint]
+				self.data.tmpregs[r as uint]
 				},
 			ParamImmediate(v) => {
 				Value::known(v)
@@ -107,13 +110,13 @@ impl<'mem> State<'mem>
 		match param
 		{
 		ParamTrueReg(r) => {
-			assert!( (r as uint) < self.registers.len() );
-			(*self.registers.get_mut(r as uint)) = val;
-			//self.registers[r as uint] = val;
+			assert!( (r as uint) < self.data.registers.len() );
+			(*self.data.registers.get_mut(r as uint)) = val;
+			//self.data.registers[r as uint] = val;
 			},
 		ParamTmpReg(r) => {
 			assert!( (r as uint) < NUM_TMPREGS );
-			self.tmpregs[r as uint] = val;
+			self.data.tmpregs[r as uint] = val;
 			},
 		ParamImmediate(_) => fail!("Setting an immediate"),
 		}
@@ -171,16 +174,16 @@ impl<'mem> State<'mem>
 	{
 		match flag
 		{
-		FlagCarry    => { self.flag_c = val; },
-		FlagOverflow => { self.flag_v = val; },
+		FlagCarry    => { self.data.flag_c = val; },
+		FlagOverflow => { self.data.flag_v = val; },
 		}
 	}
 	pub fn flag_get(&self, flag: StatusFlags) -> ValueBool
 	{
 		match flag
 		{
-		FlagCarry    => self.flag_c,
-		FlagOverflow => self.flag_v,
+		FlagCarry    => self.data.flag_c,
+		FlagOverflow => self.data.flag_v,
 		}
 	}
 	
@@ -190,7 +193,7 @@ impl<'mem> State<'mem>
 		match self.mode
 		{
 		RunModeBlockify|RunModeFull => {
-			self.stack.push(val);
+			self.data.stack.push(val);
 			},
 		_ => {},
 		}
@@ -200,7 +203,7 @@ impl<'mem> State<'mem>
 		let rv = match self.mode
 			{
 			RunModeBlockify|RunModeFull =>
-				match self.stack.pop()
+				match self.data.stack.pop()
 				{
 				Some(x) => x,
 				None => {
@@ -255,9 +258,24 @@ impl<'mem> State<'mem>
 	/// Clobber every register
 	pub fn clobber_everything(&mut self)
 	{
-		for r in self.registers.iter_mut()
+		for r in self.data.registers.iter_mut()
 		{
 			*r = Value::unknown();
+		}
+	}
+}
+
+impl StateData
+{
+	fn new(cpu: &::disasm::CPU) -> StateData
+	{
+		StateData {
+			registers: Vec::from_fn(cpu.num_regs(), |_| Value::unknown()),
+			tmpregs: [Value::unknown(), ..NUM_TMPREGS],
+			stack: Vec::with_capacity(16),
+			
+			flag_c: ::value::ValueBoolUnknown,
+			flag_v: ::value::ValueBoolUnknown,
 		}
 	}
 }
