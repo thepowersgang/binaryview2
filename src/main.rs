@@ -1,7 +1,7 @@
 //
 //
 //
-#![feature(associated_types)]
+//#![feature(associated_types)]
 #![feature(phase)]
 #![feature(macro_rules)]
 #![feature(if_let)]
@@ -84,7 +84,7 @@ fn main()
 	}
 	// > Loop until no change in state happens, or a maximum iteration count is hit
 	let mut pass_count = 0u;
-	for _ in range(0, MAX_LOOPS)
+	while pass_count < MAX_LOOPS
 	{
 		pass_count += 1;
 		

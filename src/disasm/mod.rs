@@ -124,7 +124,7 @@ impl<'a> Disassembled<'a>
 				// Flag call targets (Secondary job)
 				// - Collate them 
 				let mut was_jump = false;
-				for &(target, iscall) in state.todo_list().iter()
+				for &(_, iscall) in state.todo_list().iter()
 				{
 					if iscall {
 					}
@@ -152,6 +152,8 @@ impl<'a> Disassembled<'a>
 					// New block
 					let newblock = Block::new_rc(instr.mode(), instr.addr());
 					state = State::null(self.cpu, self.memory);
+					
+					block = newblock;
 				}
 				else
 				{
@@ -171,6 +173,12 @@ impl<'a> Disassembled<'a>
 	/// Determine the calling convention for methods
 	pub fn pass_callingconv(&mut self) -> uint
 	{
+		// For all methods
+		
+		// - Create a state with all registers primed with Canary values
+		// - Execute (branching state at conditional/multitarget jumps)
+		// - When end of method is hit, save state.
+		// - Spot reverse jumps and (TODO) [Run until stable] [Stop]
 		0
 	}
 	

@@ -5,7 +5,7 @@ use value::{Value,ValueBool,ValueType};
 use memory::MemoryStateAccess;
 use disasm::instruction::{InstrParam,ParamTrueReg,ParamTmpReg,ParamImmediate};
 
-static NUM_TMPREGS: uint = 4;
+const NUM_TMPREGS: uint = 4;
 
 /// Emulated CPU state during pseudo-execution
 pub struct State<'mem>
