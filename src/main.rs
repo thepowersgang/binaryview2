@@ -26,16 +26,16 @@ fn main()
 		getopts::optopt("m", "memmap", "Set memory map filename", "FILE"),
 		getopts::optopt("t", "types", "Set type list filename", "FILE"),
 		];
-	let args = match getopts::getopts(str_args.tail(), &opts)
+	let args = match getopts::getopts(&str_args[(1..)], &opts)
 		{
 		Ok(v) => v,
-		Err(reason) => panic!(reason.to_string()),
+		Err(reason) => panic!("getopts() failed: {}", reason),
 		};
 	let typesfile = args.opt_str("types").unwrap_or( String::from_str("types.txt") );
 	let mapfile = args.opt_str("memmap").unwrap_or( String::from_str("memorymap.txt") );
 	// - Open input files
 	let mut infiles: std::collections::HashMap<String,::std::io::File> = args.free.iter().map(|p| {
-		let mut s = p.as_slice().split('=');
+		let mut s = p.split('=');
 		let ident = s.next().unwrap();
 		let path = match s.next() {
 			Some(x) => x,
@@ -54,7 +54,7 @@ fn main()
 	// - Load type list
 	let typemap = {
 		let mut tmp = types::TypeMap::new();
-		::parse::parse_typemap(&mut tmp, typesfile.as_slice()).unwrap();
+		::parse::parse_typemap(&mut tmp, &*typesfile).unwrap();
 		tmp
 		};
 	// - Load memory map (includes overrides)
@@ -62,7 +62,7 @@ fn main()
 	let (entrypoints,) = ::parse::parse_memorymap(
 		&mut memory,
 		&typemap, &mut infiles,
-		mapfile.as_slice()
+		&*mapfile
 		).unwrap();
 	// - Select CPU
 	// TODO: Obtain CPU type from memory map

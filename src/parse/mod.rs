@@ -43,7 +43,7 @@ pub fn parse_memorymap(
 	{
 		match try!(get_tok(&mut lex))
 		{
-		lexer::TokIdent(ident) => match ident.as_slice()
+		lexer::TokIdent(ident) => match &*ident
 			{
 			"RAM" => {
 				let addr = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
@@ -153,7 +153,7 @@ pub fn parse_typemap(typemap: &mut ::types::TypeMap, path: &str) -> Result<(),St
 	{
 		match try!(get_tok(&mut lex))
 		{
-		lexer::TokIdent(ident) => match ident.as_slice()
+		lexer::TokIdent(ident) => match &*ident
 			{
 			"STRUCT" => {
 				// First line: STRUCT <name> "<format>"
@@ -167,7 +167,7 @@ pub fn parse_typemap(typemap: &mut ::types::TypeMap, path: &str) -> Result<(),St
 				loop
 				{
 					let fldname = assert_token!( lexer::TokIdent(s) = try!(get_tok(&mut lex)) );
-					if fldname.as_slice() == "END" {
+					if &*fldname == "END" {
 						break;
 					}
 					let fldtype = try!( parse_type(typemap, &mut lex) );
@@ -176,7 +176,7 @@ pub fn parse_typemap(typemap: &mut ::types::TypeMap, path: &str) -> Result<(),St
 				}
 				assert_token!( lexer::TokNewline = try!(get_tok(&mut lex)) );
 				// Create the structure
-				let newstruct: &mut _ = match typemap.new_struct(name.as_slice())
+				let newstruct: &mut _ = match typemap.new_struct(&*name)
 					{
 					Ok(s) => s,
 					Err(_) => return Err( format!("Duplicate definition of structure '{}'", name) ),
@@ -218,7 +218,7 @@ fn parse_type(typemap: &::types::TypeMap, lex: &mut lexer::Lexer) -> Result<::ty
 	// TODO: Arrays
 	
 	let roottype = assert_token!( lexer::TokIdent(i) = try!(get_tok(lex)) );
-	let inner = match typemap.get_type_by_name( roottype.as_slice() )
+	let inner = match typemap.get_type_by_name( &*roottype )
 		{
 		Ok(t) => t,
 		Err(_) => return Err( format!("Unknown type name '{}'", roottype) ),

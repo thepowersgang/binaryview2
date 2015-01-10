@@ -6,3 +6,7 @@ authors = ["John Hodge <tpg@mutabah.net>"]
 
 [dependencies.utf8reader]
 git = "git://github.com/thepowersgang/rust-utf8reader.git"
+
+[dependencies]
+getopts = "*"
+log = "*"
