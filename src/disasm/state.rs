@@ -3,9 +3,10 @@
 //
 use value::{Value,ValueBool,ValueType};
 use memory::MemoryStateAccess;
-use disasm::instruction::{InstrParam,ParamTrueReg,ParamTmpReg,ParamImmediate};
+use disasm::instruction::InstrParam;
+use disasm::CodePtr;
 
-const NUM_TMPREGS: uint = 4;
+const NUM_TMPREGS: usize = 4;
 
 /// Emulated CPU state during pseudo-execution
 pub struct State<'mem>
@@ -17,7 +18,7 @@ pub struct State<'mem>
 	memory: &'mem ::memory::MemoryState,
 	
 	/// List of addresses to be processed on next pass
-	todo_list: Vec<((u64, uint), bool)>,
+	todo_list: Vec<(CodePtr, bool)>,
 
 	/// State data (flags, registers)
 	data: StateData,
@@ -26,11 +27,11 @@ pub struct State<'mem>
 enum RunMode
 {
 	/// Minimal state propagation
-	RunModeParse,
+	Parse,
 	/// Stack enabled
-	RunModeBlockify,
+	Blockify,
 	/// Full memory and stack works
-	RunModeFull,
+	Full,
 }
 
 /// State data (stored separately to allow saving)
@@ -52,8 +53,8 @@ struct StateData
 
 pub enum StatusFlags
 {
-	FlagCarry,
-	FlagOverflow,
+	Carry,
+	Overflow,
 }
 
 impl<'mem> State<'mem>
@@ -62,7 +63,7 @@ impl<'mem> State<'mem>
 	pub fn null<'a>(cpu: &'a ::disasm::CPU, mem: &'a ::memory::MemoryState) -> State<'a>
 	{
 		State {
-			mode: RunModeParse,	// TODO: Receive as an argument
+			mode: RunMode::Parse,	// TODO: Receive as an argument
 			memory: mem,
 			data: StateData::new(cpu),
 			todo_list: Vec::new(),	
@@ -70,7 +71,7 @@ impl<'mem> State<'mem>
 	}
 
 	/// Retrive the contents of the todo list
-	pub fn todo_list(&self) -> &[((u64,uint),bool)] {
+	pub fn todo_list(&self) -> &[(CodePtr,bool)] {
 		self.todo_list.as_slice()
 	}
 	pub fn clear_todo_list(&mut self) {
@@ -88,42 +89,41 @@ impl<'mem> State<'mem>
 	{
 		let v = match param
 			{
-			ParamTrueReg(r) => {
-				assert!( (r as uint) < self.data.registers.len() );
-				self.data.registers[r as uint]
+			InstrParam::TrueReg(r) => {
+				assert!( (r as usize) < self.data.registers.len() );
+				self.data.registers[r as usize].clone()
 				},
-			ParamTmpReg(r) => {
-				assert!( (r as uint) < NUM_TMPREGS );
-				self.data.tmpregs[r as uint]
+			InstrParam::TmpReg(r) => {
+				assert!( (r as usize) < NUM_TMPREGS );
+				self.data.tmpregs[r as usize].clone()
 				},
-			ParamImmediate(v) => {
+			InstrParam::Immediate(v) => {
 				Value::known(v)
 				},
 			};
-		debug!("get({}) = {}", param, v);
+		debug!("get({:?}) = {:?}", param, v);
 		v
 	}
 	/// Set the value of a parameter (register)
 	pub fn set(&mut self, param: InstrParam, val: Value<u64>)
 	{
-		debug!("set({} = {})", param, val);
+		debug!("set({:?} = {:?})", param, val);
 		match param
 		{
-		ParamTrueReg(r) => {
-			assert!( (r as uint) < self.data.registers.len() );
-			(*self.data.registers.get_mut(r as uint)) = val;
-			//self.data.registers[r as uint] = val;
+		InstrParam::TrueReg(r) => {
+			assert!( (r as usize) < self.data.registers.len() );
+			self.data.registers[r as usize] = val;
 			},
-		ParamTmpReg(r) => {
-			assert!( (r as uint) < NUM_TMPREGS );
-			self.data.tmpregs[r as uint] = val;
+		InstrParam::TmpReg(r) => {
+			assert!( (r as usize) < NUM_TMPREGS );
+			self.data.tmpregs[r as usize] = val;
 			},
-		ParamImmediate(_) => panic!("Setting an immediate"),
+		InstrParam::Immediate(_) => panic!("Setting an immediate"),
 		}
 	}
 	
 	/// Read from emulated memory
-	pub fn read<T:ValueType+MemoryStateAccess>(&mut self, addr: Value<u64>) -> Value<T>
+	pub fn read<T:ValueType+MemoryStateAccess>(&mut self, addr: &Value<u64>) -> Value<T>
 	{
 		// TODO: Tag unknown values such that accesses to an unknown base can be tracked
 		// > Tag with origin of unknown? Probably
@@ -149,16 +149,16 @@ impl<'mem> State<'mem>
 				// Unknown address = unknown data
 				Value::<T>::unknown()
 			};
-		debug!("read({}) = {}", addr, ret);
+		debug!("read({:?}) = {:?}", addr, ret);
 		ret
 	}
 	/// Write to emulated memory
-	pub fn write<T:ValueType+MemoryStateAccess>(&mut self, addr: Value<u64>, val: Value<T>)
+	pub fn write<T:ValueType+MemoryStateAccess>(&mut self, addr: &Value<u64>, val: Value<T>)
 	{
-		debug!("write({} <= {})", addr, val);
+		debug!("write({:?} <= {:?})", addr, val);
 		match self.mode
 		{
-		RunModeFull => {
+		RunMode::Full => {
 			error!("TODO: Support write access to simulated memory");
 			// Requirements:
 			// - Store locally a set of changes applied by this state
@@ -174,25 +174,25 @@ impl<'mem> State<'mem>
 	{
 		match flag
 		{
-		FlagCarry    => { self.data.flag_c = val; },
-		FlagOverflow => { self.data.flag_v = val; },
+		StatusFlags::Carry    => { self.data.flag_c = val; },
+		StatusFlags::Overflow => { self.data.flag_v = val; },
 		}
 	}
 	pub fn flag_get(&self, flag: StatusFlags) -> ValueBool
 	{
 		match flag
 		{
-		FlagCarry    => self.data.flag_c,
-		FlagOverflow => self.data.flag_v,
+		StatusFlags::Carry    => self.data.flag_c,
+		StatusFlags::Overflow => self.data.flag_v,
 		}
 	}
 	
 	pub fn stack_push(&mut self, val: Value<u64>)
 	{
-		debug!("stack_push({})", val);
+		debug!("stack_push({:?})", val);
 		match self.mode
 		{
-		RunModeBlockify|RunModeFull => {
+		RunMode::Blockify|RunMode::Full => {
 			self.data.stack.push(val);
 			},
 		_ => {},
@@ -202,7 +202,7 @@ impl<'mem> State<'mem>
 	{
 		let rv = match self.mode
 			{
-			RunModeBlockify|RunModeFull =>
+			RunMode::Blockify|RunMode::Full =>
 				match self.data.stack.pop()
 				{
 				Some(x) => x,
@@ -213,14 +213,14 @@ impl<'mem> State<'mem>
 				},
 			_ => Value::unknown(),
 			};
-		debug!("stack_pop() = {}", rv);
+		debug!("stack_pop() = {:?}", rv);
 		rv
 	}
 
 	/// Add an address to be processed	
-	pub fn jump(&mut self, val: Value<u64>, mode: uint)
+	pub fn jump(&mut self, val: Value<u64>, mode: super::CPUMode)
 	{
-		debug!("jump({}, mode={})", val, mode);
+		debug!("jump({:?}, mode={})", val, mode);
 		if val.is_fixed_set()
 		{
 			for addr in val.possibilities()
@@ -230,7 +230,7 @@ impl<'mem> State<'mem>
 		}
 	}
 	
-	pub fn call(&mut self, val: Value<u64>, mode: uint)
+	pub fn call(&mut self, val: Value<u64>, mode: super::CPUMode)
 	{
 		if val.is_fixed_set()
 		{
@@ -238,7 +238,7 @@ impl<'mem> State<'mem>
 			{
 				self.todo_list.push( ((addr,mode),true) );
 			}
-			warn!("TODO: Call clobbering {} mode={}", val, mode);
+			warn!("TODO: Call clobbering {:?} mode={}", val, mode);
 			//if let Some(f) = state.functions.find( (mode,val
 			//{
 			//}
@@ -270,12 +270,12 @@ impl StateData
 	fn new(cpu: &::disasm::CPU) -> StateData
 	{
 		StateData {
-			registers: Vec::from_fn(cpu.num_regs(), |_| Value::unknown()),
-			tmpregs: [Value::unknown(), ..NUM_TMPREGS],
+			registers: (0 .. cpu.num_regs()).map(|_| Value::unknown()).collect(),
+			tmpregs: [Value::unknown(), Value::unknown(), Value::unknown(), Value::unknown()],
 			stack: Vec::with_capacity(16),
 			
-			flag_c: ::value::ValueBoolUnknown,
-			flag_v: ::value::ValueBoolUnknown,
+			flag_c: ValueBool::Unknown,
+			flag_v: ValueBool::Unknown,
 		}
 	}
 }

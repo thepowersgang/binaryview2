@@ -1,27 +1,27 @@
 //
 //
 //
-use std::slice::{Found,NotFound};
+use std::cmp::Ordering;
 
 pub trait SortedList<T>
 {
-	fn find_ins<'a>(&'a mut self, sort: &mut FnMut<(&T), Ordering>) -> VecInsertPos<'a,T>;
+	fn find_ins<'a, F: FnMut(&T)->Ordering>(&'a mut self, sort: F) -> VecInsertPos<'a,T>;
 }
 
 pub struct VecInsertPos<'a,T:'a>
 {
 	vec: &'a mut Vec<T>,
-	pos: uint,
+	pos: usize,
 }
 
 impl<T> SortedList<T> for Vec<T>
 {
-	fn find_ins<'s, F: Fn(&T)->Ordering>(&'s mut self, order: F) -> VecInsertPos<'s,T>
+	fn find_ins<'s, F: FnMut(&T)->Ordering>(&'s mut self, order: F) -> VecInsertPos<'s,T>
 	{
-		let pos = match self.as_mut_slice().binary_search(order)
+		let pos = match self.binary_search_by(order)
 			{
-			Found(a) => a,
-			NotFound(a) => a,
+			Ok(a) => a,
+			Err(a) => a,
 			};
 		VecInsertPos {
 			vec: self,

@@ -2,20 +2,20 @@
 //
 //
 use value::Value;
-use std::slice::{Found,NotFound};
+use std::cmp::Ordering;
 
 /// Memory region type
 enum RegionType
 {
-	RegionROM(Vec<u8>),
-	RegionRAM(Vec<Value<u8>>),
-	RegionMMIO(String),
+	ROM(Vec<u8>),
+	RAM(Vec<Value<u8>>),
+	MMIO(String),
 }
 
 struct Region
 {
 	start: u64,
-	size: uint,
+	size: usize,
 	data: RegionType
 }
 
@@ -33,18 +33,18 @@ pub trait MemoryStateAccess
 
 impl Region
 {
-	pub fn read_u8(&self, ofs: uint) -> Value<u8> {
+	pub fn read_u8(&self, ofs: usize) -> Value<u8> {
 		match self.data
 		{
-		RegionROM(ref data) => Value::known(data[ofs % self.size]),	// ROMs wrap
-		RegionRAM(ref data) => data[ofs].clone(),
-		RegionMMIO(_) => Value::unknown(),
+		RegionType::ROM(ref data) => Value::known(data[ofs % self.size]),	// ROMs wrap
+		RegionType::RAM(ref data) => data[ofs].clone(),
+		RegionType::MMIO(_) => Value::unknown(),
 		}
 	}
-	pub fn read_u16(&self, ofs: uint) -> Value<u16> {
+	pub fn read_u16(&self, ofs: usize) -> Value<u16> {
 		Value::concat(self.read_u8(ofs+0), self.read_u8(ofs+1))
 	}
-	pub fn read_u32(&self, ofs: uint) -> Value<u32> {
+	pub fn read_u32(&self, ofs: usize) -> Value<u32> {
 		Value::concat(self.read_u16(ofs+0), self.read_u16(ofs+2))
 	}
 	
@@ -52,13 +52,13 @@ impl Region
 	fn cmp_inner(&self, addr: u64) -> Ordering
 	{
 		if addr < self.start {
-			Greater
+			Ordering::Greater
 		}
 		else if addr >= self.start + self.size as u64 {
-			Less
+			Ordering::Less
 		}
 		else {
-			Equal
+			Ordering::Equal
 		}
 	}
 }
@@ -72,12 +72,12 @@ impl MemoryState
 		}
 	}
 	
-	fn add_region(&mut self, base: u64, size: uint, data: RegionType)
+	fn add_region(&mut self, base: u64, size: usize, data: RegionType)
 	{
-		let pos = match self.regions.as_slice().binary_search(|r| r.start.cmp(&base))
+		let pos = match self.regions.binary_search_by(|r| r.start.cmp(&base))
 			{
-			Found(_) => panic!("region overlap"),
-			NotFound(idx) => {
+			Ok(_) => panic!("region overlap"),
+			Err(idx) => {
 				if idx > 0 && base < self.regions[idx-1].start + self.regions[idx-1].size as u64 {
 					panic!("region overlap");
 				}
@@ -95,7 +95,7 @@ impl MemoryState
 	}
 	
 	/// Load fixed memory from a file
-	pub fn add_rom(&mut self, base: u64, size: uint, file: &mut ::std::io::File)
+	pub fn add_rom(&mut self, base: u64, size: usize, file: &mut ::std::io::File)
 	{
 		// The ROM repeats as many times as nessesary to reach the stated size
 		file.seek(0, ::std::io::SeekEnd).unwrap();
@@ -109,35 +109,35 @@ impl MemoryState
 		// 2. Load data!
 		// - Wrapping is handled in Region::read()
 		file.seek(0, ::std::io::SeekSet).unwrap();
-		self.add_region(base, size, RegionROM(file.read_to_end().unwrap()));
+		self.add_region(base, size, RegionType::ROM(file.read_to_end().unwrap()));
 		debug!("Add ROM {:#x}+{:#x}", base, size);
 	}
-	pub fn add_ram(&mut self, base: u64, size: uint)
+	pub fn add_ram(&mut self, base: u64, size: usize)
 	{
-		self.add_region(base, size, RegionRAM(Vec::from_elem(size, Value::unknown())));
+		self.add_region(base, size, RegionType::RAM(::std::iter::repeat(Value::unknown()).take(size).collect()));
 		debug!("Add RAM {:#x}+{:#x}", base, size);
 	}
-	pub fn add_mmio(&mut self, base: u64, size: uint, class: &str)
+	pub fn add_mmio(&mut self, base: u64, size: usize, class: &str)
 	{
-		self.add_region(base, size, RegionMMIO(String::from_str(class)));
+		self.add_region(base, size, RegionType::MMIO(String::from_str(class)));
 		debug!("Add MMIO {:#x}+{:#x} \"{}\"", base, size, class);
 	}
 	
 	
 	/// Get the region corresponding to a given address
-	fn get_region(&self, addr: u64) -> Option<(&Region,uint)> {
-		match self.regions.as_slice().binary_search(|r| r.cmp_inner(addr))
+	fn get_region(&self, addr: u64) -> Option<(&Region,usize)> {
+		match self.regions.binary_search_by(|r| r.cmp_inner(addr))
 		{
-		Found(idx) => {
+		Ok(idx) => {
 			let r = &self.regions[idx];
 			if addr - r.start >= r.size as u64 {
 				None
 			}
 			else {
-				Some( (r, (addr - r.start) as uint) )
+				Some( (r, (addr - r.start) as usize) )
 			}
 			},
-		NotFound(_) => {
+		Err(_) => {
 			None
 			},
 		}
@@ -162,16 +162,16 @@ impl MemoryState
 	}
 	
 	pub fn write_u8(&self, addr: u64, val: Value<u8>) {
-		panic!("TODO: MemoryState.write_u8(addr={},val={})", addr, val);
+		panic!("TODO: MemoryState.write_u8(addr={:#x},val={:?})", addr, val);
 	}
 	pub fn write_u16(&self, addr: u64, val: Value<u16>) {
-		panic!("TODO: MemoryState.write_u16(addr={},val={})", addr, val);
+		panic!("TODO: MemoryState.write_u16(addr={:#x},val={:?})", addr, val);
 	}
 	pub fn write_u32(&self, addr: u64, val: Value<u32>) {
-		panic!("TODO: MemoryState.write_u32(addr={},val={})", addr, val);
+		panic!("TODO: MemoryState.write_u32(addr={:#x},val={:?})", addr, val);
 	}
 	pub fn write_u64(&self, addr: u64, val: Value<u64>) {
-		panic!("TODO: MemoryState.write_u64(addr={},val={})", addr, val);
+		panic!("TODO: MemoryState.write_u64(addr={:#x},val={:?})", addr, val);
 	}
 }
 

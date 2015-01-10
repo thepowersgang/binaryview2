@@ -9,7 +9,9 @@ extern crate libc;
 
 use std::io::IoResult;
 
-#[deriving(Show)]
+pub use self::Token::*;
+
+#[derive(Show)]
 pub enum Token
 {
 	TokEof,
@@ -31,14 +33,14 @@ type LexResult<T> = Result<T,()>;
 /// Core lexer type
 pub struct Lexer<'r>
 {
-	instream: &'r mut Iterator<IoResult<char>>+'r,
+	instream: &'r mut (Iterator<Item=IoResult<char>>+'r),
 	lastc: Option<char>,
 	saved_tok: Option<Token>,
 }
 
 impl<'a> Lexer<'a>
 {
-	pub fn new<'r>(instream: &'r mut Iterator<IoResult<char>>) -> Lexer<'r> {
+	pub fn new<'r>(instream: &'r mut (Iterator<Item=IoResult<char>>)) -> Lexer<'r> {
 		Lexer {
 			instream: instream,
 			lastc: None,
@@ -147,15 +149,15 @@ impl<'a> Lexer<'a>
 		}
 		return Ok(ret);
 	}
-	fn read_number(&mut self, base: uint) -> LexResult<u64>
+	fn read_number(&mut self, base: u64) -> LexResult<u64>
 	{
 		let mut val = 0;
 		loop
 		{
 			let ch = try!(self.getc());
-			match ch.to_digit(base) {
+			match ch.to_digit(base as usize) {
 			Some(d) => {
-				val *= base as u64;
+				val *= base;
 				val += d as u64
 				},
 			None => {
@@ -220,7 +222,7 @@ impl<'a> Lexer<'a>
 			}
 		};
 		
-		debug!("Token = {}", ret);
+		debug!("Token = {:?}", ret);
 		
 		return Ok( ret );
 	}

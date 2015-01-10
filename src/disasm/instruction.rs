@@ -3,6 +3,7 @@
 //
 // disasm/instruction.rs
 // - Representation of a single disassembled instruction
+use super::CodePtr;
 
 /// Condition code value for an instruction that will always be executed
 pub static COND_ALWAYS: u8 = 0xFF;
@@ -10,13 +11,12 @@ pub static COND_ALWAYS: u8 = 0xFF;
 /// Instruction structure
 pub struct Instruction
 {
-	pub mode: uint,
-	pub base: u64,
+	pub ip: CodePtr,
 	pub len: u8,
 	
 	condition: u8,
 	opsize: InstrSize,
-	pub class: &'static InstructionClass + 'static,
+	pub class: &'static InstructionClass,
 	params: Vec<InstrParam>,
 	
 	block: Option<::disasm::block::BlockRef>,
@@ -26,29 +26,30 @@ pub struct Instruction
 }
 
 /// Instruction parameter
-#[deriving(PartialEq)]
+#[derive(PartialEq,Copy)]
 pub enum InstrParam
 {
-	ParamTrueReg(u8),
-	ParamTmpReg(u8),
-	ParamImmediate(u64),
+	TrueReg(u8),
+	TmpReg(u8),
+	Immediate(u64),
 }
 /// Instruction size
+#[derive(PartialEq,Copy)]
 pub enum InstrSize
 {
-	InstrSizeNA,
-	InstrSize8,
-	InstrSize16,
-	InstrSize32,
-	InstrSize64,
+	SizeNA,
+	Size8,
+	Size16,
+	Size32,
+	Size64,
 }
 
 /// Instruction class trait
-pub trait InstructionClass
+pub trait InstructionClass: 'static
 {
 	fn name(&self) -> &str;
 	fn is_terminal(&self, &[InstrParam]) -> bool;
-	fn print(&self, &mut ::std::fmt::Formatter, &[InstrParam]) -> Result<(),::std::fmt::FormatError>;
+	fn print(&self, &mut ::std::fmt::Formatter, &[InstrParam]) -> ::std::fmt::Result;
 	fn forwards(&self, &mut ::disasm::state::State, &Instruction);
 	fn backwards(&self, &mut ::disasm::state::State, &Instruction);
 }
@@ -58,19 +59,18 @@ impl Instruction
 {
 	pub fn invalid() -> Instruction
 	{
-		Instruction::new(0, COND_ALWAYS, InstrSizeNA, &INVALID, vec![])
+		Instruction::new(0, COND_ALWAYS, InstrSize::SizeNA, &INVALID, vec![])
 	}
 	pub fn new(
 		len: u8,
 		condition: u8,
 		opsize: InstrSize,
-		class: &'static InstructionClass + 'static,
+		class: &'static InstructionClass,
 		params: Vec<InstrParam>
 		) -> Instruction
 	{
 		Instruction {
-			mode: 0,
-			base: 0,
+			ip: (0, 0),
 			len: len,
 			condition: condition,
 			opsize: opsize,
@@ -81,9 +81,8 @@ impl Instruction
 			is_call_target: false,
 		}
 	}
-	pub fn set_addr(&mut self, addr: u64, mode: uint) {
-		self.mode = mode;
-		self.base = addr;
+	pub fn set_addr(&mut self, addr: CodePtr) {
+		self.ip = addr;
 	}
 	pub fn set_target(&mut self) {
 		self.is_target = true;
@@ -99,14 +98,14 @@ impl Instruction
 	pub fn is_call_target(&self) -> bool { self.is_call_target }
 	
 	pub fn contains(&self, addr: u64) -> bool {
-		self.base <= addr && addr < self.base + self.len as u64
+		self.ip.0 <= addr && addr < self.ip.0 + self.len as u64
 	}
 	pub fn is_terminal(&self) -> bool {
 		self.condition == COND_ALWAYS && self.class.is_terminal(self.params.as_slice())
 	}
 
-	pub fn addr(&self) -> u64 { self.base }
-	pub fn mode(&self) -> uint { self.mode }
+	pub fn addr(&self) -> CodePtr { self.ip }
+	pub fn mode(&self) -> super::CPUMode { self.ip.1 }
 	pub fn opsize(&self) -> InstrSize { self.opsize }
 	pub fn params(&self) -> &[InstrParam] { self.params.as_slice() }
 	pub fn block(&self) -> Option<::disasm::block::BlockRef> { self.block.clone() }
@@ -114,10 +113,10 @@ impl Instruction
 
 impl ::std::fmt::Show for Instruction
 {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
-		try!( write!(f, "[{}:{:8x}]+{} ", self.mode, self.base, self.len) );
-		try!( write!(f, "{{{}}}:{:x} {} ", self.opsize, self.condition, self.class.name()) );
+		try!( write!(f, "[{}:{:8x}]+{} ", self.ip.1, self.ip.0, self.len) );
+		try!( write!(f, "{{{:?}}}:{:x} {} ", self.opsize, self.condition, self.class.name()) );
 		try!( self.class.print(f, self.params.as_slice()) );
 		Ok( () )
 	}
@@ -130,20 +129,20 @@ impl InstrParam
 	{
 		match self
 		{
-		&ParamImmediate(v) => v,
-		_ => panic!("Expected immediate value, got {}", self),
+		&InstrParam::Immediate(v) => v,
+		_ => panic!("Expected immediate value, got {:?}", self),
 		}
 	}
 }
 impl ::std::fmt::Show for InstrParam
 {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
 		match self
 		{
-		&ParamTrueReg(r) => write!(f, "R{}", r),
-		&ParamTmpReg(r) => write!(f, "tr#{}", r),
-		&ParamImmediate(v) => write!(f, "{:#x}", v),
+		&InstrParam::TrueReg(r) => write!(f, "R{}", r),
+		&InstrParam::TmpReg(r) => write!(f, "tr#{}", r),
+		&InstrParam::Immediate(v) => write!(f, "{:#x}", v),
 		}
 	}
 }
@@ -151,15 +150,15 @@ impl ::std::fmt::Show for InstrParam
 // --------------------------------------------------------------------
 impl ::std::fmt::Show for InstrSize
 {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
 		match self
 		{
-		&InstrSizeNA => write!(f, "NA"),
-		&InstrSize8  => write!(f, " 8"),
-		&InstrSize16 => write!(f, "16"),
-		&InstrSize32 => write!(f, "32"),
-		&InstrSize64 => write!(f, "64"),
+		&InstrSize::SizeNA => write!(f, "NA"),
+		&InstrSize::Size8  => write!(f, " 8"),
+		&InstrSize::Size16 => write!(f, "16"),
+		&InstrSize::Size32 => write!(f, "32"),
+		&InstrSize::Size64 => write!(f, "64"),
 		}
 	}
 }

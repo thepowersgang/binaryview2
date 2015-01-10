@@ -6,15 +6,17 @@ use utf8reader::UTF8Reader;
 mod lexer;
 
 macro_rules! assert_token{
-	($pat:pat , $val:expr , $tok:expr , $name:expr) => (match $tok { $pat => $val, tok @ _ => return Err( format!("Unexpected {}, expected {}", tok, $name) )});
+	($pat:pat , $val:expr , $tok:expr , $name:expr) => (match $tok { $pat => $val, tok @ _ => return Err( format!("Unexpected {:?}, expected {:?}", tok, $name) )});
 	(lexer::$pat:ident($val:ident) = $tok:expr) => (assert_token!(lexer::$pat($val) , ($val) , $tok , stringify!($pat)));
 	(lexer::$pat:ident = $tok:expr) => (assert_token!(lexer::$pat , () , $tok , stringify!($pat)));
 }
 
 pub fn get_tok(lex: &mut lexer::Lexer) -> Result<lexer::Token,String>
 {
-	lex.get_token().map_err(|e|format!("Lex Error: {}", e))
+	lex.get_token().map_err(|e|format!("Lex Error: {:?}", e))
 }
+
+type Entrypoint = ::disasm::CodePtr;
 
 /// Parse a memory map file
 ///
@@ -26,10 +28,10 @@ pub fn parse_memorymap(
 	memory: &mut ::memory::MemoryState,
 	//symbols: &mut ::symbols::Symbols,
 	typemap: &::types::TypeMap,
-	infiles: &mut MutableMap<String,::std::io::File>,
+	infiles: &mut ::std::collections::HashMap<String,::std::io::File>,
 	path: &str
 	)
-	-> Result<(Vec<(u64,uint)>,),String>
+	-> Result<(Vec<Entrypoint>,),String>
 {
 	let mut entrypoints = Vec::new();
 	let fp = ::std::io::File::open(&::std::path::Path::new(path)).unwrap();
@@ -48,14 +50,14 @@ pub fn parse_memorymap(
 				let size = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
 				assert_token!( lexer::TokNewline = try!(get_tok(&mut lex)) );
 				debug!("Add RAM {:#x}+{:#x}", addr, size);
-				memory.add_ram(addr, size as uint);
+				memory.add_ram(addr, size as usize);
 				},
 			"MMIO" => {
 				let addr = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
 				let size = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
 				assert_token!( lexer::TokNewline = try!(get_tok(&mut lex)) );
 				debug!("Add MMIO {:#x}+{:#x}", addr, size);
-				memory.add_mmio(addr, size as uint, "");
+				memory.add_mmio(addr, size as usize, "");
 				},
 			"ROM" => {
 				let addr = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
@@ -63,11 +65,11 @@ pub fn parse_memorymap(
 				let file_id = assert_token!( lexer::TokIdent(s) = try!(get_tok(&mut lex)) );
 				assert_token!( lexer::TokNewline = try!(get_tok(&mut lex)) );
 				debug!("Add ROM {:#x}+{:#x} ident {}", addr, size, file_id);
-				match infiles.find_mut(&file_id)
+				match infiles.get_mut(&file_id)
 				{
 				None => return Err( format!("No filename set for ident '{}'", file_id) ),
 				Some(file_struct) => {
-					memory.add_rom(addr, size as uint, file_struct);
+					memory.add_rom(addr, size as usize, file_struct);
 					}
 				}
 				},
@@ -76,7 +78,7 @@ pub fn parse_memorymap(
 				let mode = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
 				assert_token!( lexer::TokNewline = try!(get_tok(&mut lex)) );
 				debug!("Add entrypoint {:#x} mode={}", addr, mode);
-				entrypoints.push( (addr, mode as uint) );
+				entrypoints.push( (addr, mode as ::disasm::CPUMode) );
 				},
 			"METHOD" => {
 				let addr = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
@@ -96,7 +98,7 @@ pub fn parse_memorymap(
 						let paramtype = try!( parse_type(typemap, &mut lex) );
 						args.push( (paramname, paramtype) );
 						},
-					tok @ _ => return Err( format!("Unexpected '{}', expected TokParenClose or TokIdent", tok) )
+					tok @ _ => return Err( format!("Unexpected '{:?}', expected TokParenClose or TokIdent", tok) )
 					}
 					
 					match try!(get_tok(&mut lex))
@@ -106,13 +108,13 @@ pub fn parse_memorymap(
 						break;
 						},
 					lexer::TokComma => {},
-					tok @ _ => return Err( format!("Unexpected '{}', expected TokParenClose or TokComma", tok) )
+					tok @ _ => return Err( format!("Unexpected '{:?}', expected TokParenClose or TokComma", tok) )
 					}
 				}
 				assert_token!( lexer::TokParenClose = try!(get_tok(&mut lex)) );
 				let ret_type = try!( parse_type(typemap, &mut lex) );
 				assert_token!( lexer::TokNewline = try!(get_tok(&mut lex)) );
-				debug!("Add method {} at {:#x}, args: {}, ret: {}", name, addr, args, ret_type);
+				debug!("Add method {} at {:#x}, args: {:?}, ret: {:?}", name, addr, args, ret_type);
 				error!("TODO: Add method {}", name);
 				},
 			"STATIC" => {
@@ -120,14 +122,14 @@ pub fn parse_memorymap(
 				let name = assert_token!( lexer::TokIdent(s) = try!(get_tok(&mut lex)) );
 				let val_type = try!( parse_type(typemap, &mut lex) );
 				assert_token!( lexer::TokNewline = try!(get_tok(&mut lex)) );
-				debug!("Add static {} at {:#x}, type: {}", name, addr, val_type);
+				debug!("Add static {} at {:#x}, type: {:?}", name, addr, val_type);
 				},
 			_ => return Err( format!("Unknown attribute in memory map '{}'", ident) ),
 			},
 		lexer::TokEof => break,
 		lexer::TokNewline => continue,
 		tok @ _ => {
-			return Err( format!("Unexpected {}, expected TokIdent or TokEOF", tok) );
+			return Err( format!("Unexpected {:?}, expected TokIdent or TokEOF", tok) );
 			}
 		}
 	}
@@ -188,7 +190,7 @@ pub fn parse_typemap(typemap: &mut ::types::TypeMap, path: &str) -> Result<(),St
 		lexer::TokEof => break,
 		lexer::TokNewline => continue,
 		tok @ _ => {
-			return Err( format!("Unexpected {}, expected TokIdent or TokEOF", tok) );
+			return Err( format!("Unexpected {:?}, expected TokIdent or TokEOF", tok) );
 			}
 		}
 	}
@@ -223,10 +225,10 @@ fn parse_type(typemap: &::types::TypeMap, lex: &mut lexer::Lexer) -> Result<::ty
 		};
 	
 	Ok(if ptrdepth > 0 {
-			::types::TypePointer(ptrdepth, inner)
+			::types::Type::Pointer(ptrdepth, inner)
 		}
 		else {
-			::types::TypeLit(inner)
+			::types::Type::Lit(inner)
 		})
 	
 }

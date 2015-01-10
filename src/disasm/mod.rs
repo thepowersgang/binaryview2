@@ -15,15 +15,18 @@ mod instruction;
 mod block;
 pub mod cpus;
 
+pub type CPUMode = u32;
+pub type CodePtr = (u64, CPUMode);
+
 trait CPU
 {
 	/// Return the number of CPU-defined registers
-	fn num_regs(&self) -> uint;
+	fn num_regs(&self) -> u16;
 	
 	/// Disassemble a single instruction
-	fn disassemble(&self, &::memory::MemoryState, u64, uint) -> Result<instruction::Instruction,()>;
+	fn disassemble(&self, &::memory::MemoryState, u64, CPUMode) -> Result<instruction::Instruction,()>;
 	/// Prepare state for exection of an instruction at the specified address
-	fn prep_state(&self, &mut state::State, u64, uint);
+	fn prep_state(&self, &mut state::State, u64, CPUMode);
 	
 	//// Check the outcome of a condition code check
 	//fn check_condition(&self, &mut state::State, u8) -> ValueBool;
@@ -32,12 +35,12 @@ trait CPU
 pub struct Disassembled<'a>
 {
 	memory: &'a ::memory::MemoryState,
-	cpu: &'a CPU+'a,
+	cpu: &'a (CPU+'a),
 	instructions: Vec<Box<instruction::Instruction>>,
 	
-	todo_list: Vec<(u64,uint)>,
+	todo_list: Vec<CodePtr>,
 	// TODO: Store is_call flag
-	method_list: HashSet<(u64,uint)>,
+	method_list: HashSet<CodePtr>,
 }
 
 impl<'a> Disassembled<'a>
@@ -53,11 +56,11 @@ impl<'a> Disassembled<'a>
 		}
 	}
 	/// Count total instructions converted
-	pub fn instr_count(&self) -> uint {
+	pub fn instr_count(&self) -> usize {
 		self.instructions.len()
 	}
 	
-	pub fn dump(&self, f: &mut ::std::fmt::FormatWriter) -> Result<(),::std::fmt::FormatError>
+	pub fn dump(&self, f: &mut ::std::fmt::Writer) -> ::std::fmt::Result
 	{
 		for instr in self.instructions.iter()
 		{
@@ -74,16 +77,16 @@ impl<'a> Disassembled<'a>
 			{
 				try!(write!(f, " "));
 			}
-			try!(write!(f, "{}\n", instr));
+			try!(write!(f, "{:?}\n", instr));
 		}
 		Ok( () )
 	}
 	
 	/// Run disassembly on the todo list
-	pub fn convert_queue(&mut self) -> uint
+	pub fn convert_queue(&mut self) -> usize
 	{
 		let todo = ::std::mem::replace(&mut self.todo_list, Vec::new());
-		info!("convert_queue(): todo = {}", todo);
+		info!("convert_queue(): todo = {:?}", todo);
 		let ret = todo.len();
 		for (addr,mode) in todo.into_iter()
 		{
@@ -96,18 +99,18 @@ impl<'a> Disassembled<'a>
 	///
 	/// Breaks the code into blocks, separated by jump instructions and jump targets
 	/// Also handles marking of instructions as call targets for later passes	
-	pub fn pass_blockify(&mut self) -> uint
+	pub fn pass_blockify(&mut self) -> usize
 	{
 		info!("pass_blockify()");
-		let mut count = 0u;
+		let mut count = 0;
 		let mut state = State::null(self.cpu, self.memory);
-		let mut block = Block::new_rc(0,0);
+		let mut block = Block::new_rc( (0,0) );
 		
 		// 1. Iterate all instructions
 		for instr in self.instructions.iter_mut()
 		{
 			// (side) Mark call targets using global method list
-			if self.method_list.contains( &(instr.addr(), instr.mode()) )
+			if self.method_list.contains( &instr.addr() ) 
 			{
 				instr.set_call_target();
 			}
@@ -142,7 +145,7 @@ impl<'a> Disassembled<'a>
 				//       followed by a target (or be at the end).
 				if instr.is_target() || was_jump
 				{
-					debug!("New block triggered at {}:{:#x}", instr.mode(), instr.addr());
+					debug!("New block triggered at {}:{:#x}", instr.addr().1, instr.addr().0);
 					count += 1;
 					
 					// TODO: Store state at end of the block
@@ -150,7 +153,7 @@ impl<'a> Disassembled<'a>
 					//block.set_state( state );
 					
 					// New block
-					let newblock = Block::new_rc(instr.mode(), instr.addr());
+					let newblock = Block::new_rc(instr.ip);
 					state = State::null(self.cpu, self.memory);
 					
 					block = newblock;
@@ -171,7 +174,7 @@ impl<'a> Disassembled<'a>
 	}
 	
 	/// Determine the calling convention for methods
-	pub fn pass_callingconv(&mut self) -> uint
+	pub fn pass_callingconv(&mut self) -> usize
 	{
 		// For all methods
 		
@@ -183,10 +186,10 @@ impl<'a> Disassembled<'a>
 	}
 	
 	/// Disassemble starting from a given address
-	pub fn convert_from(&mut self, addr: u64, mode: uint)
+	pub fn convert_from(&mut self, addr: u64, mode: CPUMode)
 	{
 		debug!("convert_from(addr={:#x},mode={})", addr, mode);
-		let mut todo = Vec::<(u64,uint)>::new();
+		let mut todo = Vec::<CodePtr>::new();
 		
 		// Actual disassembly call
 		self.convert_from_inner(addr, mode, &mut todo);
@@ -194,19 +197,19 @@ impl<'a> Disassembled<'a>
 		// Disassembly pass (holds a mutable handle to the instruction list
 		// Convert local todo list into the 'global' list (pruning duplicate
 		// entries and already-converted entries)
-		debug!("- TODO = {}", todo);
+		debug!("- TODO = {:?}", todo);
 		for item in todo.into_iter()
 		{
-			match self.instructions.as_slice().binary_search(|e| (e.base,e.mode).cmp(&item))
+			match self.instructions.binary_search_by(|e| e.ip.cmp(&item))
 			{
-			::std::slice::NotFound(_) => {
+			Err(_) => {
 				let mut p = self.todo_list.find_ins(|e| e.cmp(&item));
 				if p.is_end() || *p.next() != item { 
 					p.insert( item );
 				}
 				},
-			::std::slice::Found(i) => {
-				self.instructions.get_mut(i).set_target();
+			Ok(i) => {
+				self.instructions[i].set_target();
 				},
 			}
 		}
@@ -215,12 +218,12 @@ impl<'a> Disassembled<'a>
 	/// (internal) Does the actual disassembly
 	///
 	/// Holds a mutable handle to self.instructions, so can't be part of convert_from
-	fn convert_from_inner(&mut self, mut addr: u64, mode: uint, todo: &mut Vec<(u64,uint)>)
+	fn convert_from_inner(&mut self, mut addr: u64, mode: CPUMode, todo: &mut Vec<CodePtr>)
 	{
 		let mut state = State::null(self.cpu, self.memory);
 		
 		// Locate the insert location for the first instruction
-		let mut pos = self.instructions.find_ins(|e| e.base.cmp(&addr));
+		let mut pos = self.instructions.find_ins(|e| e.ip.0.cmp(&addr));
 		if !pos.is_end() && pos.next().contains(addr)
 		{
 			debug!("- Address {:#x},mode={} already processed", addr, mode);
@@ -237,7 +240,7 @@ impl<'a> Disassembled<'a>
 				{
 				Ok(i) => i,
 				Err(e) => {
-					error!("Disassembly of {:#x} [mode={}] failed: {}", addr, mode, e);
+					error!("Disassembly of {:#x} [mode={}] failed: {:?}", addr, mode, e);
 					// Return a placeholder, simplifying later code
 					instruction::Instruction::invalid()
 					},
@@ -250,8 +253,8 @@ impl<'a> Disassembled<'a>
 			
 			// Set common state on instruction
 			// - Straight out of the disassembler, it is just a bare instruction
-			instr.set_addr(addr, mode);
-			debug!("> {}", instr);
+			instr.set_addr( (addr, mode) );
+			debug!("> {:?}", instr);
 			
 			// Execute with minimal state
 			self.cpu.prep_state(&mut state, addr, mode);

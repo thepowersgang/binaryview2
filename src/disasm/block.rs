@@ -11,25 +11,23 @@ pub type BlockRef = Rc<RefCell<Block>>;
 
 pub struct Block
 {
-	mode: uint,
-	addr: u64,
+	ip: ::disasm::CodePtr,
 	refs: Vec<BlockRef>,
 	//endstate: State<'static>,
 }
 
 impl Block
 {
-	pub fn new_rc(mode: uint, addr: u64) -> BlockRef
+	pub fn new_rc(ip: ::disasm::CodePtr) -> BlockRef
 	{
-		Rc::new( RefCell::new( Block::new(mode, addr) ) )
+		Rc::new( RefCell::new( Block::new(ip) ) )
 	}
 	
-	fn new(mode: uint, addr: u64) -> Block
+	fn new(ip: ::disasm::CodePtr) -> Block
 	{
-		debug!("New block for {}:{:#x}", mode, addr);
+		debug!("New block for {}:{:#x}", ip.1, ip.0);
 		Block {
-			mode: mode,
-			addr: addr,
+			ip: ip,
 			refs: Vec::new(),
 			//endstate: State::null(),
 		}

@@ -3,18 +3,17 @@
 //
 // disam/cpus/arm.rs
 // - Recent ARM CPU disassembly (written against ARMv5)
-use value::{Value,ValueKnown};
+use value::{Value,ValueBool};
 use disasm::common_instrs;
 use disasm::instruction::COND_ALWAYS;
 use disasm::instruction::{Instruction,InstructionClass};
-use disasm::instruction::{InstrParam,ParamImmediate,ParamTrueReg,ParamTmpReg};
-use disasm::instruction::{InstrSizeNA,InstrSize8,InstrSize16,InstrSize32};
+use disasm::instruction::{InstrParam,InstrSize};
 
 trait BitExtractor {
-	fn bits(&self, base: uint, count: uint) -> Self;
+	fn bits(&self, base: usize, count: usize) -> Self;
 }
 impl BitExtractor for u16 {
-	fn bits(&self, base: uint, count: uint) -> u16 {
+	fn bits(&self, base: usize, count: usize) -> u16 {
 		(*self >> base) & ((1 << count)-1)
 	}
 }
@@ -22,30 +21,30 @@ impl BitExtractor for u16 {
 struct ArmCpu;
 
 #[repr(C)]
-enum SystemRegisters
+enum SReg
 {
-	SRegCPSR = 0,
-	SRegSPSR = 1,
+	CPSR = 0,
+	SPSR = 1,
 }
 
 pub static CPU_STRUCT: ArmCpu = ArmCpu;
 
 impl ::disasm::CPU for ArmCpu
 {
-	fn num_regs(&self) -> uint {
+	fn num_regs(&self) -> u16 {
 		16
 	}
-	fn prep_state(&self, state: &mut ::disasm::state::State, addr: u64, mode: uint) {
+	fn prep_state(&self, state: &mut ::disasm::state::State, addr: u64, mode: ::disasm::CPUMode) {
 		let pc_val = match mode
 			{
 			0 => addr + 8,		// ARM mode
 			1 => addr + 4 + 1,	// THUMB mode
 			_ => panic!("Invalid ARM mode"),
 			};
-		state.set( ParamTrueReg(15), Value::known(pc_val) );
+		state.set( InstrParam::TrueReg(15), Value::known(pc_val) );
 	}
 	
-	fn disassemble(&self, mem: &::memory::MemoryState, addr: u64, mode: uint) -> Result<Instruction,()>
+	fn disassemble(&self, mem: &::memory::MemoryState, addr: u64, mode: ::disasm::CPUMode) -> Result<Instruction,()>
 	{
 		match mode
 		{
@@ -79,43 +78,43 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<Instruction
 	{
         0x120 => {	// mov CPSR, Rn
 		Instruction::new(
-			4, ccode, InstrSize32,
+			4, ccode, InstrSize::Size32,
 			&instrs::SET_SREG,
 			vec![
-				ParamImmediate( SRegCPSR as u64 ),
+				InstrParam::Immediate( SReg::CPSR as u64 ),
 				reg(word, 0),
-				ParamImmediate( match (word>>20)&3 { 0=>0,1=>0,2=>0,_=>0 } ),
+				InstrParam::Immediate( match (word>>20)&3 { 0=>0,1=>0,2=>0,_=>0 } ),
 				]
 			)
 		},
 	// Branch+Exchange Register
-	0x121 => Instruction::new( 4, ccode, InstrSizeNA, &instrs::BX, vec![ reg(word, 0) ] ),
+	0x121 => Instruction::new( 4, ccode, InstrSize::SizeNA, &instrs::BX, vec![ reg(word, 0) ] ),
 	// Branch+Link+Exchange
-	0x123 => Instruction::new( 4, ccode, InstrSizeNA, &instrs::BLX, vec![ reg(word, 0) ] ),
+	0x123 => Instruction::new( 4, ccode, InstrSize::SizeNA, &instrs::BLX, vec![ reg(word, 0) ] ),
 	// Logical-Shift-Left (and Reg/Reg Move)
 	0x1A0 => {
 		let amt = (word >> 7) & 31;
 		if amt == 0 {
-			Instruction::new( 4, ccode, InstrSize32, &common_instrs::MOVE, vec![
+			Instruction::new( 4, ccode, InstrSize::Size32, &common_instrs::MOVE, vec![
 				reg(word,12), reg(word,0)
 				] )
 		}
 		else {
-			Instruction::new( 4, ccode, InstrSize32, &common_instrs::SHL, vec![
-				reg(word,12), reg(word,0), ParamImmediate(amt as u64)
+			Instruction::new( 4, ccode, InstrSize::Size32, &common_instrs::SHL, vec![
+				reg(word,12), reg(word,0), InstrParam::Immediate(amt as u64)
 				] )
 		}
 		},
 	// Logical-Shift-Left
-	0x1A1 => Instruction::new( 4, ccode, InstrSize32, &common_instrs::SHL, vec![
+	0x1A1 => Instruction::new( 4, ccode, InstrSize::Size32, &common_instrs::SHL, vec![
 			reg(word,12), reg(word,0), reg(word,8)
 			]
 		),
 	// Add (Register, Immediate)
 	0x280 ... 0x28F => Instruction::new(
-		4, ccode, InstrSize32, &common_instrs::ADD,
+		4, ccode, InstrSize::Size32, &common_instrs::ADD,
 		vec![
-			reg(word, 12), reg(word, 16), ParamImmediate( expand_imm_arm(word & 0xFFF) ),
+			reg(word, 12), reg(word, 16), InstrParam::Immediate( expand_imm_arm(word & 0xFFF) ),
 			]
 		),
 	0x3A0 ... 0x3BF => {
@@ -126,48 +125,48 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<Instruction
 			panic!("TODO: Handle move immediate to PC");
 		}
 		Instruction::new(
-			4, ccode, InstrSize32,
+			4, ccode, InstrSize::Size32,
 			&common_instrs::MOVE,
 			vec![
-				ParamTrueReg( Rd ),
-				ParamImmediate( expand_imm_arm(word & 0xFFF) ),
+				InstrParam::TrueReg( Rd ),
+				InstrParam::Immediate( expand_imm_arm(word & 0xFFF) ),
 				]
 			)
 		},
 	// STR Rd, [Rn,#imm12]
 	0x580 ... 0x58F => Instruction::new(
-		4, ccode, InstrSize32,
+		4, ccode, InstrSize::Size32,
 		&common_instrs::STORE_OFS,
 		vec![
-			ParamTrueReg( ((word>>12)&0xF) as u8 ),
-			ParamTrueReg( ((word>>16)&0xF) as u8 ),
-			ParamImmediate( sign_extend(12, word & 0xFFF) ),
+			InstrParam::TrueReg( ((word>>12)&0xF) as u8 ),
+			InstrParam::TrueReg( ((word>>16)&0xF) as u8 ),
+			InstrParam::Immediate( sign_extend(12, word & 0xFFF) ),
 			]
 		),
 	// LDR Rd, [Rn,#imm12]
 	0x590 ... 0x59F => Instruction::new(
-		4, ccode, InstrSize32,
+		4, ccode, InstrSize::Size32,
 		&common_instrs::LOAD_OFS,
 		vec![
-			ParamTrueReg( ((word>>12)&0xF) as u8 ),
-			ParamTrueReg( ((word>>16)&0xF) as u8 ),
-			ParamImmediate( sign_extend(12, word & 0xFFF) ),
+			InstrParam::TrueReg( ((word>>12)&0xF) as u8 ),
+			InstrParam::TrueReg( ((word>>16)&0xF) as u8 ),
+			InstrParam::Immediate( sign_extend(12, word & 0xFFF) ),
 			]
 		),
 	0xA00 ... 0xAFF => {
 		// Jump to Address+opr*4+8
 		Instruction::new(
-			4, ccode, InstrSizeNA,
+			4, ccode, InstrSize::SizeNA,
 			&common_instrs::JUMP as &InstructionClass,
-			vec![ ParamImmediate(addr + 8 + sign_extend(24, word & 0xFFFFFF) * 4), ]
+			vec![ InstrParam::Immediate(addr + 8 + sign_extend(24, word & 0xFFFFFF) * 4), ]
 			)
 		},
 	0xB00 ... 0xBFF => {
 		// Branch+Link (call) Address+opr*4+8
 		Instruction::new(
-			4, ccode, InstrSizeNA,
+			4, ccode, InstrSize::SizeNA,
 			&common_instrs::CALL as &InstructionClass,
-			vec![ ParamImmediate(addr + 8 + sign_extend(24, word & 0xFFFFFF) * 4), ]
+			vec![ InstrParam::Immediate(addr + 8 + sign_extend(24, word & 0xFFFFFF) * 4), ]
 			)
 		},
 	_ => {
@@ -187,56 +186,56 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 	{
 	// Logical Shift Left
 	0x00 ... 0x01 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &common_instrs::SHL,
-		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( word.bits(6,5) as u64) ]
+		2, COND_ALWAYS, InstrSize::Size32, &common_instrs::SHL,
+		vec![ reg_t(word, 0), reg_t(word, 3), InstrParam::Immediate( word.bits(6,5) as u64) ]
 		),
 	// Logical Shift Right
 	0x02 ... 0x03 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &common_instrs::SHR,
-		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( word.bits(6,5) as u64) ]
+		2, COND_ALWAYS, InstrSize::Size32, &common_instrs::SHR,
+		vec![ reg_t(word, 0), reg_t(word, 3), InstrParam::Immediate( word.bits(6,5) as u64) ]
 		),
 	// Arithmetic Shift Right
 	0x04 ... 0x05 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &instrs::ASR,
-		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( word.bits(6,5) as u64) ]
+		2, COND_ALWAYS, InstrSize::Size32, &instrs::ASR,
+		vec![ reg_t(word, 0), reg_t(word, 3), InstrParam::Immediate( word.bits(6,5) as u64) ]
 		),
 	// Add/Sub reg
 	0x06 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32,
+		2, COND_ALWAYS, InstrSize::Size32,
 		if (word >> 9) & 1 != 0 { &common_instrs::SUB } else { &common_instrs::ADD },
 		vec![ reg_t(word, 0), reg_t(word, 3), reg_t(word, 6) ]
 		),
 	// Add/Sub imm3
 	0x07 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32,
+		2, COND_ALWAYS, InstrSize::Size32,
 		if (word >> 9) & 1 != 0 { &common_instrs::SUB } else { &common_instrs::ADD },
-		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( word.bits(6,3) as u64 ) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), InstrParam::Immediate( word.bits(6,3) as u64 ) ]
 		),
 	// MOV Rd, #imm8
 	0x08 ... 0x09 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &common_instrs::MOVE,
-		vec![ reg_t(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
+		2, COND_ALWAYS, InstrSize::Size32, &common_instrs::MOVE,
+		vec![ reg_t(word, 8), InstrParam::Immediate( (word & 0xFF) as u64 ) ]
 		),
 	// CMP Rd, #imm8
 	0x0a ... 0x0b => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &common_instrs::SUB,	// < Use SUB and assign to #tr0
-		vec![ ParamTmpReg(0), reg_t(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
+		2, COND_ALWAYS, InstrSize::Size32, &common_instrs::SUB,	// < Use SUB and assign to #tr0
+		vec![ InstrParam::TmpReg(0), reg_t(word, 8), InstrParam::Immediate( (word & 0xFF) as u64 ) ]
 		),
 	// ADD Rd, Rd, #imm8
 	0x0c ... 0x0d => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &common_instrs::ADD,
-		vec![ reg_t(word,8), reg_t(word,8), ParamImmediate( (word & 0xFF) as u64 ) ]
+		2, COND_ALWAYS, InstrSize::Size32, &common_instrs::ADD,
+		vec![ reg_t(word,8), reg_t(word,8), InstrParam::Immediate( (word & 0xFF) as u64 ) ]
 		),
 	// SUB Rd, Rd, #imm8
 	0x0e ... 0x0f => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &common_instrs::SUB,
-		vec![ reg_t(word,8), reg_t(word,8), ParamImmediate( (word & 0xFF) as u64 ) ]
+		2, COND_ALWAYS, InstrSize::Size32, &common_instrs::SUB,
+		vec![ reg_t(word,8), reg_t(word,8), InstrParam::Immediate( (word & 0xFF) as u64 ) ]
 		),
 	// 0x10 - Data Processing (Sect A6-8)
 	0x10 => match (word >> 6) & 0xF
 		{
 		v @ 0x0 ... 0x07 | v @ 0xc ... 0xe => Instruction::new(
-				2, COND_ALWAYS, InstrSize32,
+				2, COND_ALWAYS, InstrSize::Size32,
 				match v
 				{
 				0x0 => &common_instrs::AND as &InstructionClass,
@@ -256,18 +255,18 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 			),
 		// - TEST Rt, Rn
 		0x8 => Instruction::new(
-			2, COND_ALWAYS, InstrSize32, &common_instrs::AND,
-			vec![ ParamTmpReg(0), reg_t(word, 0), reg_t(word,3) ]
+			2, COND_ALWAYS, InstrSize::Size32, &common_instrs::AND,
+			vec![ InstrParam::TmpReg(0), reg_t(word, 0), reg_t(word,3) ]
 			),
 		// - Reverse Subtract (RSB) (Negate?)
 		0x9 => Instruction::new(
-			2, COND_ALWAYS, InstrSize32, &common_instrs::SUB,
-			vec![ reg_t(word, 0), ParamImmediate(0), reg_t(word,3) ]
+			2, COND_ALWAYS, InstrSize::Size32, &common_instrs::SUB,
+			vec![ reg_t(word, 0), InstrParam::Immediate(0), reg_t(word,3) ]
 			),
 		// - CMP Rt, Rn
 		0xA => Instruction::new(
-			2, COND_ALWAYS, InstrSize32, &common_instrs::SUB,
-			vec![ ParamTmpReg(0), reg_t(word, 0), reg_t(word,3) ]
+			2, COND_ALWAYS, InstrSize::Size32, &common_instrs::SUB,
+			vec![ InstrParam::TmpReg(0), reg_t(word, 0), reg_t(word,3) ]
 			),
 		0xB => {
 			error!("ARM THUMB 0x10:B Undefined");
@@ -275,7 +274,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 			},
 		// - NOT
 		0xF => Instruction::new(
-			2, COND_ALWAYS, InstrSize32, &common_instrs::NOT,
+			2, COND_ALWAYS, InstrSize::Size32, &common_instrs::NOT,
 			vec![ reg_t(word, 0), reg_t(word,3) ]
 			),
 		v @ _ => panic!("ARM THUMB 0x10 Unmatched {:x}", v)
@@ -287,7 +286,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 		{
 		// ADD R, R, R
 		0x0 => Instruction::new(
-			2, COND_ALWAYS, InstrSize32, &common_instrs::ADD,
+			2, COND_ALWAYS, InstrSize::Size32, &common_instrs::ADD,
 			vec![ reg_t(word, 0), reg_t(word, 3), reg_t(word, 6) ]
 			),
 		// ADD Rd, Rd, Rn (high)
@@ -298,8 +297,8 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 			}
 			else {
 				Instruction::new(
-					2, COND_ALWAYS, InstrSize32, &common_instrs::ADD,
-					vec![ ParamTrueReg(Rd), ParamTrueReg(Rd), reg(word as u32,3) ]
+					2, COND_ALWAYS, InstrSize::Size32, &common_instrs::ADD,
+					vec![ InstrParam::TrueReg(Rd), InstrParam::TrueReg(Rd), reg(word as u32,3) ]
 					)
 			}
 			},
@@ -308,24 +307,24 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 			return Err( () );
 			},
 		0x5 ... 0x7 => Instruction::new(
-				2, COND_ALWAYS, InstrSize32, &common_instrs::SUB,
-				vec![ ParamTmpReg(0), ParamTrueReg(Rd), reg(word as u32, 3) ]
+				2, COND_ALWAYS, InstrSize::Size32, &common_instrs::SUB,
+				vec![ InstrParam::TmpReg(0), InstrParam::TrueReg(Rd), reg(word as u32, 3) ]
 			),
 		// Move Register (High)
 		0x9 ... 0xb => {
 			let Rn = (word >> 3) & 0xF;
 			if Rd == 15 {
-				Instruction::new(2, COND_ALWAYS, InstrSizeNA, &common_instrs::JUMP,
-					vec![ ParamTrueReg(Rn as u8) ])
+				Instruction::new(2, COND_ALWAYS, InstrSize::SizeNA, &common_instrs::JUMP,
+					vec![ InstrParam::TrueReg(Rn as u8) ])
 			}
 			else {
-				Instruction::new(2, COND_ALWAYS, InstrSize32, &common_instrs::MOVE,
-					vec![ ParamTrueReg(Rd as u8), ParamTrueReg(Rn as u8) ])
+				Instruction::new(2, COND_ALWAYS, InstrSize::Size32, &common_instrs::MOVE,
+					vec![ InstrParam::TrueReg(Rd as u8), InstrParam::TrueReg(Rn as u8) ])
 			}
 			},
 		// BX Rd
 		0xc ... 0xd => Instruction::new(
-			2, COND_ALWAYS, InstrSizeNA, &common_instrs::JUMP,
+			2, COND_ALWAYS, InstrSize::SizeNA, &common_instrs::JUMP,
 			vec![ reg(word as u32, 3) ]
 			),
 		v @ _ => {
@@ -336,55 +335,55 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 		},
 	// LDR Rt, [PC,#imm8]
 	0x12 ... 0x13 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &common_instrs::LOAD_OFS,
-		vec![ reg_t(word, 0), ParamImmediate((addr + 4) & !3), ParamImmediate( (word.bits(0,8)*4) as u64 ) ]
+		2, COND_ALWAYS, InstrSize::Size32, &common_instrs::LOAD_OFS,
+		vec![ reg_t(word, 0), InstrParam::Immediate((addr + 4) & !3), InstrParam::Immediate( (word.bits(0,8)*4) as u64 ) ]
 		),
 	// (STR|LDR) Rt, [Rn,#imm5]
 	0x18 ... 0x1B => Instruction::new(
-		2, COND_ALWAYS, InstrSize32,
+		2, COND_ALWAYS, InstrSize::Size32,
 		if word.bits(11,1) != 0 { &common_instrs::LOAD_OFS } else { &common_instrs::STORE_OFS },
-		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( (word.bits(6,5) * 4) as u64 ) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), InstrParam::Immediate( (word.bits(6,5) * 4) as u64 ) ]
 		),
 	// (STR|LDR)B Rt, [Rn,#imm5]
 	0x1C ... 0x1F => Instruction::new(
-		2, COND_ALWAYS, InstrSize8,
+		2, COND_ALWAYS, InstrSize::Size8,
 		if word.bits(11,1) != 0 { &common_instrs::LOAD_OFS } else { &common_instrs::STORE_OFS },
-		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( (word.bits(6,5) * 1) as u64 ) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), InstrParam::Immediate( (word.bits(6,5) * 1) as u64 ) ]
 		),
 	// (STR|LDR)H Rt, [Rn,#imm5]
 	0x20 ... 0x23 => Instruction::new(
-		2, COND_ALWAYS, InstrSize16,
+		2, COND_ALWAYS, InstrSize::Size16,
 		if word.bits(11,1) != 0 { &common_instrs::LOAD_OFS } else { &common_instrs::STORE_OFS },
-		vec![ reg_t(word, 0), reg_t(word, 3), ParamImmediate( (word.bits(6,5) * 2) as u64 ) ]
+		vec![ reg_t(word, 0), reg_t(word, 3), InstrParam::Immediate( (word.bits(6,5) * 2) as u64 ) ]
 		),
 	// (STR|LDR) Rt, [SP,#imm8]
 	0x24 ... 0x27 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32,
+		2, COND_ALWAYS, InstrSize::Size32,
 		if word.bits(11,1) != 0 { &common_instrs::LOAD_OFS } else { &common_instrs::STORE_OFS },
-		vec![ reg_t(word, 8), ParamTrueReg(13), ParamImmediate( (word.bits(6,8) * 4) as u64 ) ]
+		vec![ reg_t(word, 8), InstrParam::TrueReg(13), InstrParam::Immediate( (word.bits(6,8) * 4) as u64 ) ]
 		),
 	// ADR Rd, [PC,#imm8]
 	0x28 ... 0x29 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &common_instrs::ADD,
-		vec![ reg_t(word, 8), ParamTrueReg(15), ParamImmediate( (word.bits(6,8) * 4) as u64 ) ]
+		2, COND_ALWAYS, InstrSize::Size32, &common_instrs::ADD,
+		vec![ reg_t(word, 8), InstrParam::TrueReg(15), InstrParam::Immediate( (word.bits(6,8) * 4) as u64 ) ]
 		),
 	// ADD Rd, SP, #imm8*4
 	0x2A ... 0x2B => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &common_instrs::ADD,
-		vec![ reg_t(word, 8), ParamTrueReg(13), ParamImmediate( (word.bits(6,8) * 4) as u64 ) ]
+		2, COND_ALWAYS, InstrSize::Size32, &common_instrs::ADD,
+		vec![ reg_t(word, 8), InstrParam::TrueReg(13), InstrParam::Immediate( (word.bits(6,8) * 4) as u64 ) ]
 		),
 	// Misc Instructions (A6..2.5)
 	0x2C => match (word >> 5) & 0x1F
 		{
 		// ADD SP, SP, #imm5
 		0x0 ... 0x3 => Instruction::new(
-			2, COND_ALWAYS, InstrSize32, &common_instrs::ADD,
-			vec![ ParamTrueReg(13), ParamTrueReg(13), ParamImmediate( (word.bits(0,5) * 4) as u64 ) ]
+			2, COND_ALWAYS, InstrSize::Size32, &common_instrs::ADD,
+			vec![ InstrParam::TrueReg(13), InstrParam::TrueReg(13), InstrParam::Immediate( (word.bits(0,5) * 4) as u64 ) ]
 			),
 		// SUB SP, SP, #imm5
 		0x4 ... 0x7 => Instruction::new(
-			2, COND_ALWAYS, InstrSize32, &common_instrs::SUB,
-			vec![ ParamTrueReg(13), ParamTrueReg(13), ParamImmediate( (word.bits(0,5) * 4) as u64 ) ]
+			2, COND_ALWAYS, InstrSize::Size32, &common_instrs::SUB,
+			vec![ InstrParam::TrueReg(13), InstrParam::TrueReg(13), InstrParam::Immediate( (word.bits(0,5) * 4) as u64 ) ]
 			),
 		v @ _ => {
 			error!("Unknown opcode 2C:{:x}", v);
@@ -395,9 +394,9 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 	0x2D => match (word >> 5) & 0x1F
 		{
 		0x0 ... 0xF => Instruction::new(
-			2, COND_ALWAYS, InstrSize32, &instrs::PUSH_M,
+			2, COND_ALWAYS, InstrSize::Size32, &instrs::PUSH_M,
 			// Bitmask. Instr[8] = LR
-			vec![ ParamImmediate( (((word >> 8) & 1) << 14 | (word & 0xFF)) as u64) ]
+			vec![ InstrParam::Immediate( (((word >> 8) & 1) << 14 | (word & 0xFF)) as u64) ]
 			),
 		v @ _ => {
 			error!("Unknown opcode 2D:{:x}", v);
@@ -408,9 +407,9 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 		{
 		// POP Multiple
 		0x0 ... 0x1 => Instruction::new(
-			2, COND_ALWAYS, InstrSize32, &instrs::POP_M,
+			2, COND_ALWAYS, InstrSize::Size32, &instrs::POP_M,
 			// Bitmask. Instr[8] = PC
-			vec![ ParamImmediate( (((word >> 8) & 1) << 15 | (word & 0xFF)) as u64) ]
+			vec![ InstrParam::Immediate( (((word >> 8) & 1) << 15 | (word & 0xFF)) as u64) ]
 			),
 		v @ _ => {
 			error!("Unknown opcode 2F{:x}", v);
@@ -419,32 +418,32 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 		},
 	// STM - Store Multiple
 	0x30 ... 0x31 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &instrs::STM,
-		vec![ reg_t(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
+		2, COND_ALWAYS, InstrSize::Size32, &instrs::STM,
+		vec![ reg_t(word, 8), InstrParam::Immediate( (word & 0xFF) as u64 ) ]
 		),
 	// LDM - Load Multiple
 	0x32 ... 0x33 => Instruction::new(
-		2, COND_ALWAYS, InstrSize32, &instrs::LDM,
-		vec![ reg_t(word, 8), ParamImmediate( (word & 0xFF) as u64 ) ]
+		2, COND_ALWAYS, InstrSize::Size32, &instrs::LDM,
+		vec![ reg_t(word, 8), InstrParam::Immediate( (word & 0xFF) as u64 ) ]
 		),
 	// Conditional Branch + Supervisor Call
 	0x34 ... 0x37 => match word.bits(8, 4)
 		{
 		0x0 ... 0xD => Instruction::new(
-			2, word.bits(8,4) as u8, InstrSizeNA, &common_instrs::JUMP,
-			vec![ ParamImmediate(addr + 4 + sign_extend(9, (word.bits(0,8)*2) as u32)) ]
+			2, word.bits(8,4) as u8, InstrSize::SizeNA, &common_instrs::JUMP,
+			vec![ InstrParam::Immediate(addr + 4 + sign_extend(9, (word.bits(0,8)*2) as u32)) ]
 			),
 		0xE => return Err( () ),
 		0xF => Instruction::new(
-			2, COND_ALWAYS, InstrSizeNA, &instrs::SVC,
-			vec![ ParamImmediate(word.bits(0, 8) as u64) ]
+			2, COND_ALWAYS, InstrSize::SizeNA, &instrs::SVC,
+			vec![ InstrParam::Immediate(word.bits(0, 8) as u64) ]
 			),
 		_ => panic!(""),
 		},
 	// B imm11
 	0x38 ... 0x39 => Instruction::new(
-		2, COND_ALWAYS, InstrSizeNA, &common_instrs::JUMP,
-		vec![ ParamImmediate(addr + 4 + sign_extend(12, (word.bits(0,11)*2) as u32)) ]
+		2, COND_ALWAYS, InstrSize::SizeNA, &common_instrs::JUMP,
+		vec![ InstrParam::Immediate(addr + 4 + sign_extend(12, (word.bits(0,11)*2) as u32)) ]
 		),
 	// 32-bit instructions
 	0x3a ... 0x3f => {
@@ -502,12 +501,12 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 					
 					if (word2>>12) & 1 == 0 {
 						// Switch to ARM mode
-						Instruction::new(4, COND_ALWAYS, InstrSizeNA, &instrs::BLX,
-							vec![ ParamImmediate( addr + 4 + sign_extend(25, ofs) ) ])
+						Instruction::new(4, COND_ALWAYS, InstrSize::SizeNA, &instrs::BLX,
+							vec![ InstrParam::Immediate( addr + 4 + sign_extend(25, ofs) ) ])
 					}
 					else {
-						Instruction::new(4, COND_ALWAYS, InstrSizeNA, &common_instrs::CALL,
-							vec![ ParamImmediate( addr + 4 + sign_extend(25, ofs) ) ])
+						Instruction::new(4, COND_ALWAYS, InstrSize::SizeNA, &common_instrs::CALL,
+							vec![ InstrParam::Immediate( addr + 4 + sign_extend(25, ofs) ) ])
 					}
 					},
 				v @ _ => {
@@ -564,7 +563,7 @@ fn readmem<T: ::value::ValueType+::memory::MemoryStateAccess>(mem: &::memory::Me
 	use memory::MemoryStateAccess;
 	match MemoryStateAccess::read(mem, addr)
 	{
-	Some(ValueKnown(x)) => Ok(x),
+	Some(Value::Known(x)) => Ok(x),
 	Some(_) => {
 		error!("Disassembling non-concrete memory at {:#x}", addr);
 		Err( () )
@@ -579,7 +578,7 @@ fn readmem<T: ::value::ValueType+::memory::MemoryStateAccess>(mem: &::memory::Me
 // ---
 // Helpers
 // ---
-fn sign_extend(bits: uint, value: u32) -> u64
+fn sign_extend(bits: usize, value: u32) -> u64
 {
 	if value >> (bits-1) != 0 {
 		(value as u64) | ( ::std::u64::MAX << bits )
@@ -592,36 +591,36 @@ fn sign_extend(bits: uint, value: u32) -> u64
 fn expand_imm_arm(imm12: u32) -> u64
 {
 	let val_ur = imm12 & 0xFF;
-	let count = (((imm12 >> 8) & 0xF) * 2) as uint;
+	let count = (((imm12 >> 8) & 0xF) * 2) as usize;
 	((val_ur >> count) | (val_ur << (32 - count))) as u64
 }
 
-fn reg(word: u32, ofs: uint) -> InstrParam
+fn reg(word: u32, ofs: usize) -> InstrParam
 {
-	ParamTrueReg( ((word >> ofs) & 15) as u8 )
+	InstrParam::TrueReg( ((word >> ofs) & 15) as u8 )
 }
-fn reg_t(word: u16, ofs: uint) -> InstrParam
+fn reg_t(word: u16, ofs: usize) -> InstrParam
 {
-	ParamTrueReg( ((word >> ofs) & 7) as u8 )
+	InstrParam::TrueReg( ((word >> ofs) & 7) as u8 )
 }
 
 mod instrs
 {
-	use value::Value;
+	use value::{Value,ValueBool};
 	use disasm::state::State;
-	use disasm::instruction::{InstrParam,ParamImmediate,ParamTrueReg};
+	use disasm::instruction::InstrParam;
 
 	// Set system register
 	def_instr!{SET_SREG, InstrSetSReg, (f,instr,p,state) => {
 		{ false };
-		{ write!(f, "SR{} {} {}", p[0], p[1], p[2]) };
+		{ write!(f, "SR{:?} {:?} {:?}", p[0], p[1], p[2]) };
 		{
 			let regid = match p[0] {
-				ParamImmediate(v) => v,
-				_ => panic!("Invalid type for param[0] of SET_SREG, {}", p[0]),
+				InstrParam::Immediate(v) => v,
+				_ => panic!("Invalid type for param[0] of SET_SREG, {:?}", p[0]),
 				};
 			let val = state.get(p[1]);
-			warn!("TODO: Assign SReg {} value {}", regid, val);
+			warn!("TODO: Assign SReg {} value {:?}", regid, val);
 		};
 		{
 			unimplemented!();
@@ -630,9 +629,9 @@ mod instrs
 	
 	def_instr!{SVC, InstrSVC, (f,instr,p,state) => {
 		{ false };
-		{ write!(f, "{}", p[0]) };
+		{ write!(f, "{:?}", p[0]) };
 		{
-			warn!("TODO: ARM SVC - Apply based on some description (Arg={})", p[0]);
+			warn!("TODO: ARM SVC - Apply based on some description (Arg={:?})", p[0]);
 			state.clobber_everything();
 		};
 		{
@@ -643,15 +642,15 @@ mod instrs
 	// Branch+Exchange
 	def_instr!{BX, InstrBX, (f,instr,p,state) => {
 		{ true };
-		{ write!(f, "{}", p[0]) };
+		{ write!(f, "{:?}", p[0]) };
 		{
 			let addr = state.get(p[0]);
-			let mode = addr & Value::known(1);
-			if mode == Value::known(1)
+			let mode = addr.bit(0);
+			if mode == ValueBool::True
 			{
 				state.jump(addr & Value::known(!1), 1)
 			}
-			else if mode == Value::known(0)
+			else if mode == ValueBool::False
 			{
 				state.jump(addr & Value::known(!1), 0)
 			}
@@ -669,10 +668,10 @@ mod instrs
 	// Branch+Link+Exchange
 	def_instr!{BLX, InstrBLX, (f,instr,p,state) => {
 		{ true };
-		{ write!(f, "{}", p[0]) };
+		{ write!(f, "{:?}", p[0]) };
 		{
 			let addr = state.get(p[0]);
-			error!("TODO: BLX {}", addr);
+			error!("TODO: BLX {:?}", addr);
 			unimplemented!();
 		};
 		{
@@ -700,7 +699,7 @@ mod instrs
 			for i in range(0,16).rev() {
 				if mask & 1 << i != 0 {
 					// TODO: Decrement stack pointer
-					let val = state.get( ParamTrueReg(i as u8) );
+					let val = state.get( InstrParam::TrueReg(i as u8) );
 					state.stack_push( val );
 				}
 			}
@@ -734,7 +733,7 @@ mod instrs
 				if mask & 1 << i != 0 {
 					// TODO: Decrement stack pointer
 					let val = state.stack_pop();
-					state.set( ParamTrueReg(i as u8), val );
+					state.set( InstrParam::TrueReg(i as u8), val );
 				}
 			}
 		};
@@ -748,7 +747,7 @@ mod instrs
 	def_instr!{STM, InstrSTM, (f,instr,p,state) => {
 		{ false };
 		{
-			try!( write!(f, "{}", p[0]) );
+			try!( write!(f, "{:?}", p[0]) );
 			let mask = p[1].immediate();
 			for i in range(0,16) {
 				if mask & 1 << i != 0 {
@@ -763,8 +762,8 @@ mod instrs
 			debug!("mask={:x}", mask);
 			for i in range(0,16).rev() {
 				if mask & 1 << i != 0 {
-					let val = state.get( ParamTrueReg(i as u8) );
-					state.write(addr, val);
+					let val = state.get( InstrParam::TrueReg(i as u8) );
+					state.write(&addr, val);
 					// TODO: Support alternate types of STM
 					addr = addr + Value::known(4);
 				}
@@ -781,7 +780,7 @@ mod instrs
 	def_instr!{LDM, InstrLDM, (f,instr,p,state) => {
 		{ false };
 		{
-			try!( write!(f, "{}", p[0]) );
+			try!( write!(f, "{:?}", p[0]) );
 			let mask = p[1].immediate();
 			for i in range(0,16) {
 				if mask & 1 << i != 0 {
@@ -796,8 +795,8 @@ mod instrs
 			debug!("mask={:x}", mask);
 			for i in range(0,16).rev() {
 				if mask & 1 << i != 0 {
-					let val = state.read(addr);
-					state.set( ParamTrueReg(i as u8), val );
+					let val = state.read(&addr);
+					state.set( InstrParam::TrueReg(i as u8), val );
 					// TODO: Support alternate types of LDM
 					addr = addr + Value::known(4);
 				}
@@ -814,7 +813,7 @@ mod instrs
 	// ASR - Arithmetic Shift Right
 	def_instr!{ASR, IClassAsr, (f, instr, params, state) => {
 		{ false };
-		{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+		{ write!(f, "{:?}, {:?}, {:?}", params[0], params[1], params[2]) };
 		{
 			let v = state.get(params[1]);
 			let count = state.get(params[2]);
@@ -822,16 +821,16 @@ mod instrs
 			{
 				let base_mask = match v.bit(v.bitsize()-1)
 					{
-					::value::ValueBoolUnknown => Value::unknown(),
-					::value::ValueBoolTrue => Value::ones(),
-					::value::ValueBoolFalse => Value::zero(),
+					ValueBool::Unknown => Value::unknown(),
+					ValueBool::True => Value::ones(),
+					ValueBool::False => Value::zero(),
 					};
 				if c >= v.bitsize() as u64 {
 					warn!("Overshift in ASR {} >= {}", c, v.bitsize());
 					state.set(params[0], base_mask);
 				}
 				else {
-					let c = c as uint;
+					let c = c as usize;
 					let (_,mask) = base_mask << c;
 					let (_out,base_val) = v >> c;
 					let val = base_val | mask;
@@ -852,7 +851,7 @@ mod instrs
 	// AND with NOT of provided mask
 	def_instr!{BIC, IClassBic, (f, instr, params, state) => {
 		{ false };
-		{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+		{ write!(f, "{:?}, {:?}, {:?}", params[0], params[1], params[2]) };
 		{
 			let v = state.get(params[1]);
 			let mask = state.get(params[2]);

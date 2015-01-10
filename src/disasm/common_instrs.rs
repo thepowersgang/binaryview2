@@ -3,13 +3,11 @@
 //
 // disasm/common_instrs.rs
 // - Common generic instructions
-use disasm::instruction::InstructionClass;
-use disasm::instruction::{InstrParam,ParamTmpReg,ParamImmediate};
-use disasm::instruction::{InstrSizeNA,InstrSize8,InstrSize16,InstrSize32,InstrSize64};
+use disasm::instruction::{InstructionClass,InstrSize,InstrParam};
 use disasm::microcode;
 use disasm::microcode::UCodeOp;
 use disasm::state::State;
-use disasm::state::{FlagCarry};
+use disasm::state::StatusFlags;
 use value::{Value,ValueBool,ValueType};
 
 macro_rules! def_instr{
@@ -24,7 +22,7 @@ macro_rules! def_instr{
 			let _ = $params;
 			$isterm
 		}
-		fn print(&self, $fmt: &mut ::std::fmt::Formatter, $params: &[::disasm::instruction::InstrParam]) -> Result<(),::std::fmt::FormatError> {
+		fn print(&self, $fmt: &mut ::std::fmt::Formatter, $params: &[::disasm::instruction::InstrParam]) -> ::std::fmt::Result {
 			$print
 		}
 		fn forwards(&self, $state: &mut ::disasm::state::State, $instr: &::disasm::instruction::Instruction) {
@@ -46,11 +44,11 @@ macro_rules! size_call{
 	($size:expr, $fcn:ident($($args:expr),+)) => {
 		match $size
 		{
-		InstrSizeNA => panic!(concat!("InstrSizeNA when calling ", stringify!($fcn))),
-		InstrSize8  => $fcn::<u8> ($($args),+),
-		InstrSize16 => $fcn::<u16>($($args),+),
-		InstrSize32 => $fcn::<u32>($($args),+),
-		InstrSize64 => $fcn::<u64>($($args),+),
+		InstrSize::SizeNA => panic!(concat!("InstrSizeNA when calling ", stringify!($fcn))),
+		InstrSize::Size8  => $fcn::<u8> ($($args),+),
+		InstrSize::Size16 => $fcn::<u16>($($args),+),
+		InstrSize::Size32 => $fcn::<u32>($($args),+),
+		InstrSize::Size64 => $fcn::<u64>($($args),+),
 		}
 	}
 }
@@ -58,7 +56,7 @@ macro_rules! size_call{
 // JUMP - Shift program execution elsewhere
 def_instr!{JUMP, IClassJump, (f,instr,p,state) => {
 	{ true };
-	{ write!(f, "{}", p[0]) };
+	{ write!(f, "{:?}", p[0]) };
 	{
 		let target = state.get( p[0] );
 		state.jump( target, instr.mode() );
@@ -70,7 +68,7 @@ def_instr!{JUMP, IClassJump, (f,instr,p,state) => {
 // TODO: Needs to handle state munging from subroutine clobbers
 def_instr!{CALL, IClassCall, (f,instr,p,state) => {
 	{ false };
-	{ write!(f, "{}", p[0]) };
+	{ write!(f, "{:?}", p[0]) };
 	{
 		let target = state.get( p[0] );
 		state.call(target, instr.mode());
@@ -83,7 +81,7 @@ def_instr!{CALL, IClassCall, (f,instr,p,state) => {
 // MOVE - Shift a value between registers
 def_instr!{MOVE, IClassMove, (f,instr,params,state) => {
 	{ false };
-	{ write!(f, "{}, {}", params[0], params[1]) };
+	{ write!(f, "{:?}, {:?}", params[0], params[1]) };
 	{
 		let val = state.get(params[1]);
 		state.set(params[0], val);
@@ -98,15 +96,15 @@ def_instr!{MOVE, IClassMove, (f,instr,params,state) => {
 // SHL - Bitwise Shift Left
 def_instr!{SHL, IClassShl, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{} := {} << {}", params[0], params[1], params[2]) };
+	{ write!(f, "{:?} := {:?} << {:?}", params[0], params[1], params[2]) };
 	{
 		let v = state.get(params[1]);
 		let count = state.get(params[2]);
 		if let Some(c) = count.val_known()
 		{
-			let (ov,cf) = size_call!( instr.opsize(), shl_fwds(v.truncate(), c as uint) );
+			let (ov,cf) = size_call!( instr.opsize(), shl_fwds(v.truncate(), c as usize) );
 			state.set(params[0], ov);
-			state.flag_set(FlagCarry, cf);
+			state.flag_set(StatusFlags::Carry, cf);
 		}
 		else
 		{
@@ -116,10 +114,10 @@ def_instr!{SHL, IClassShl, (f, instr, params, state) => {
 	};
 	{ unimplemented!(); };
 }}
-fn shl_fwds<T:ValueType>(val: Value<T>, count: uint) -> (Value<u64>,ValueBool)
+fn shl_fwds<T:ValueType>(val: Value<T>, count: usize) -> (Value<u64>,ValueBool)
 {
 	if count >= val.bitsize() {
-		(Value::known(0), ::value::ValueBoolUnknown)
+		(Value::known(0), ValueBool::Unknown)
 	}
 	else {
 		let (extra,res) = val << count;
@@ -130,32 +128,32 @@ fn shl_fwds<T:ValueType>(val: Value<T>, count: uint) -> (Value<u64>,ValueBool)
 // SHR - Bitwise Shift Right
 def_instr!{SHR, IClassShr, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{} := {} >> {}", params[0], params[1], params[2]) };
+	{ write!(f, "{:?} := {:?} >> {:?}", params[0], params[1], params[2]) };
 	{
 		let v = state.get(params[1]);
 		let count = state.get(params[2]);
 		if let Some(c) = count.val_known()
 		{
-			let (res, cf) = size_call!( instr.opsize(), shr_fwds(v.truncate(), c as uint) );
+			let (res, cf) = size_call!( instr.opsize(), shr_fwds(v.truncate(), c as usize) );
 			state.set(params[0], res);
-			state.flag_set(FlagCarry, cf);
+			state.flag_set(StatusFlags::Carry, cf);
 		}
 		else
 		{
 			warn!("TODO: SHL by a set/range of values");
 			state.set(params[0], Value::unknown());
-			state.flag_set(FlagCarry, ::value::ValueBoolUnknown);
+			state.flag_set(StatusFlags::Carry, ValueBool::Unknown);
 		}
 	};
 	{ unimplemented!(); };
 }}
-fn shr_fwds<T:ValueType>(val: Value<T>, c: uint) -> (Value<u64>,ValueBool)
+fn shr_fwds<T:ValueType>(val: Value<T>, c: usize) -> (Value<u64>,ValueBool)
 {
 	if c > val.bitsize() {
-		(Value::known(0), ::value::ValueBoolFalse)
+		(Value::known(0), ValueBool::False)
 	}
 	else {
-		let (extra,res) = val >> c as uint;
+		let (extra,res) = val >> c;
 		(res.zero_extend(), extra.bit(0))
 	}
 }
@@ -164,13 +162,13 @@ fn shr_fwds<T:ValueType>(val: Value<T>, c: uint) -> (Value<u64>,ValueBool)
 // ROR - Bitwise Rotate Right
 def_instr!{ROR, IClassRor, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{} := {} >>> {}", params[0], params[1], params[2]) };
+	{ write!(f, "{:?} := {:?} >>> {:?}", params[0], params[1], params[2]) };
 	{
 		let v = state.get(params[1]);
 		let count = state.get(params[2]);
 		if let Some(c) = count.val_known()
 		{
-			let (res, ) = size_call!( instr.opsize(), ror_fwds(v.truncate(), c as uint) );
+			let (res, ) = size_call!( instr.opsize(), ror_fwds(v.truncate(), c as usize) );
 			state.set(params[0], res);
 		}
 		else
@@ -181,7 +179,7 @@ def_instr!{ROR, IClassRor, (f, instr, params, state) => {
 	};
 	{ unimplemented!(); };
 }}
-fn ror_fwds<T:ValueType>(v: Value<T>, c: uint) -> (Value<u64>,)
+fn ror_fwds<T:ValueType>(v: Value<T>, c: usize) -> (Value<u64>,)
 {
 	if c >= v.bitsize() {
 		(Value::known(0), )
@@ -197,23 +195,23 @@ fn carry_val<T:ValueType>(c: ValueBool) -> Value<T>
 	match c
 	{
 	// TODO: Convert unknown into a two value set
-	::value::ValueBoolUnknown => Value::unknown(),
+	ValueBool::Unknown => Value::unknown(),
 	// NOTE: .truncate() can zero extend too
-	::value::ValueBoolTrue  => Value::known(1u64).truncate(),
-	::value::ValueBoolFalse => Value::known(0u64).truncate(),
+	ValueBool::True  => Value::known(1u64).truncate(),
+	ValueBool::False => Value::known(0u64).truncate(),
 	}
 }
 // ADD - Addition of two values into a register
 def_instr!{ADD, IClassAdd, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{ write!(f, "{:?}, {:?}, {:?}", params[0], params[1], params[2]) };
 	{
 		let a = state.get(params[1]);
 		let b = state.get(params[2]);
-		let ci = state.flag_get(::disasm::state::FlagCarry);
+		let ci = state.flag_get(StatusFlags::Carry);
 		let (val, cf) = size_call!( instr.opsize(), add_fwds(a.truncate(), b.truncate(), ci) );
 		state.set(params[0], val);
-		state.flag_set(::disasm::state::FlagCarry, cf);
+		state.flag_set(StatusFlags::Carry, cf);
 	};
 	{
 		unimplemented!();
@@ -224,21 +222,21 @@ fn add_fwds<T:ValueType>(a: Value<T>, b: Value<T>, c: ValueBool) -> (Value<u64>,
 	let carry_in = carry_val(c);
 	let rv = a + b + carry_in;
 	// TODO: Set flags based on val (requires changing return of "Add<Value>")
-	let co = ::value::ValueBoolUnknown;
+	let co = ValueBool::Unknown;
 	(rv.zero_extend(), co)
 }
 
 // SUB - Subtraction of two values into a register
 def_instr!{SUB, IClassSub, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{ write!(f, "{:?}, {:?}, {:?}", params[0], params[1], params[2]) };
 	{
 		let a = state.get(params[1]);
 		let b = state.get(params[2]);
-		let ci = state.flag_get(::disasm::state::FlagCarry);
+		let ci = state.flag_get(StatusFlags::Carry);
 		let (val, borrowed) = size_call!( instr.opsize(), sub_fwds(a.truncate(), b.truncate(), ci) );
 		state.set(params[0], val);
-		state.flag_set(::disasm::state::FlagCarry, borrowed);
+		state.flag_set(StatusFlags::Carry, borrowed);
 	};
 	{
 		unimplemented!();
@@ -249,14 +247,14 @@ fn sub_fwds<T:ValueType>(a: Value<T>, b: Value<T>, c: ValueBool) -> (Value<u64>,
 	let borrow = carry_val(c);
 	let rv = a - b - borrow;
 	// TODO: Support borrow out
-	let borrow_out = ::value::ValueBoolUnknown;
+	let borrow_out = ValueBool::Unknown;
 	(rv.zero_extend(), borrow_out)
 }
 
 // AND - bitwise AND of two values into a register
 def_instr!{AND, IClassAnd, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{ write!(f, "{:?}, {:?}, {:?}", params[0], params[1], params[2]) };
 	{
 		let val = state.get(params[1]) & state.get(params[2]);
 		state.set(params[0], val);
@@ -270,7 +268,7 @@ def_instr!{AND, IClassAnd, (f, instr, params, state) => {
 // Bitwise OR of two values into a register
 def_instr!{OR, IClassOr, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{ write!(f, "{:?}, {:?}, {:?}", params[0], params[1], params[2]) };
 	{
 		let val = state.get(params[1]) | state.get(params[2]);
 		state.set(params[0], val);
@@ -284,7 +282,7 @@ def_instr!{OR, IClassOr, (f, instr, params, state) => {
 // Bitwise Exclusive OR of two values into a register
 def_instr!{XOR, IClassXor, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{ write!(f, "{:?}, {:?}, {:?}", params[0], params[1], params[2]) };
 	{
 		let val = state.get(params[1]) ^ state.get(params[2]);
 		state.set(params[0], val);
@@ -298,7 +296,7 @@ def_instr!{XOR, IClassXor, (f, instr, params, state) => {
 // MUL - Multiply two values into a register
 def_instr!{MUL, IClassMul, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
+	{ write!(f, "{:?}, {:?}, {:?}", params[0], params[1], params[2]) };
 	{
 		let (_hi,val) = state.get(params[1]) * state.get(params[2]);
 		state.set(params[0], val);
@@ -312,7 +310,7 @@ def_instr!{MUL, IClassMul, (f, instr, params, state) => {
 
 def_instr!{NOT, IClassNot, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{}, {}", params[0], params[1]) };
+	{ write!(f, "{:?}, {:?}", params[0], params[1]) };
 	{
 		let val = !state.get(params[1]);
 		state.set(params[0], val);
@@ -327,30 +325,30 @@ def_instr!{NOT, IClassNot, (f, instr, params, state) => {
 // LOAD (OFS) - Load from a register+offset
 def_instr!{LOAD_OFS, IClassLoadOfs, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "{}, [{}+{}]", params[0], params[1], params[2]) };
+	{ write!(f, "{:?}, [{:?}+{:?}]", params[0], params[1], params[2]) };
 	{
 		let addr = state.get(params[1]) + state.get(params[2]);
-		state.set( ParamTmpReg(0), addr );
-		microcode::LOAD.forwards(state, instr.opsize(), [params[0], ParamTmpReg(0)]);
+		state.set( InstrParam::TmpReg(0), addr );
+		microcode::LOAD.forwards(state, instr.opsize(), &[params[0], InstrParam::TmpReg(0)]);
 	};
 	{
 		if params[0] != params[1] && params[0] != params[2]
 		{
 			let addr = state.get(params[1]) + state.get(params[2]);
-			state.set( ParamTmpReg(0), addr );
+			state.set( InstrParam::TmpReg(0), addr );
 		}
-		microcode::LOAD.backwards(state, instr.opsize(), [params[0], ParamTmpReg(0)]);
+		microcode::LOAD.backwards(state, instr.opsize(), &[params[0], InstrParam::TmpReg(0)]);
 	};
 }}
 
 // STORE (OFS) - Store using an offset from a register
 def_instr!{STORE_OFS, IClassStoreOfs, (f, instr, params, state) => {
 	{ false };
-	{ write!(f, "[{}+{}], {}", params[1], params[2], params[0]) };
+	{ write!(f, "[{:?}+{:?}], {:?}", params[1], params[2], params[0]) };
 	{
 		let addr = state.get(params[1]) + state.get(params[2]);
-		state.set( ParamTmpReg(0), addr );
-		microcode::STORE.forwards(state, instr.opsize(), [params[0], ParamTmpReg(0)]);
+		state.set( InstrParam::TmpReg(0), addr );
+		microcode::STORE.forwards(state, instr.opsize(), &[params[0], InstrParam::TmpReg(0)]);
 	};
 	{
 		let addr = if params[0] != params[1] && params[0] != params[2] {
@@ -359,8 +357,8 @@ def_instr!{STORE_OFS, IClassStoreOfs, (f, instr, params, state) => {
 			else {
 				Value::unknown()
 			};
-		state.set(ParamTmpReg(0), addr);
-		microcode::STORE.backwards(state, instr.opsize(), [params[0], ParamTmpReg(0)]);
+		state.set(InstrParam::TmpReg(0), addr);
+		microcode::STORE.backwards(state, instr.opsize(), &[params[0], InstrParam::TmpReg(0)]);
 	};
 }}
 

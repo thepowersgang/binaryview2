@@ -6,42 +6,44 @@
 //
 // A core type to BinaryView, this represents a register value during execution and a possible value
 // for RAM.
-use std::num::Zero;
+use std::num::{Int,UnsignedInt,NumCast};
 use std::fmt::LowerHex;
+use std::cmp::Ordering;
 
 /// Trait for valid values in a value (only implemented for unsigned sized integers)
-pub trait ValueType : Int + Unsigned + Zero + LowerHex { }
+pub trait ValueType : UnsignedInt + LowerHex { }
 impl ValueType for u8 {}
 impl ValueType for u16 {}
 impl ValueType for u32 {}
 impl ValueType for u64 {}
 
 /// A dynamic value (range determined during execution)
-#[deriving(Clone,PartialEq)]
+#[derive(Clone)]
 pub enum Value<T: ValueType>
 {
-	ValueUnknown,
-	ValueKnown(T),
+	Unknown,
+	Known(T),
 	// TODO: Support value sets
-	//ValueSet(Rc<Vec<T>>),
+	//Set(Rc<Vec<T>>),
 	// TODO: Support range+mask (or similar)
-	//ValueMasked(T,T),	// (Value,KnownFlag)
+	//Masked(T,T),	// (Value,KnownFlag)
 	// TODO: Support multi-state, e.g. Unknown or a set of possible values
 	// - That would be messy to work with, and probably not needed?
-	//ValueNested(Rc<Vec<Value<T>>>),
+	//Nested(Rc<Vec<Value<T>>>),
 }
 
+#[derive(PartialEq,Copy)]
 pub enum ValueBool
 {
-	ValueBoolTrue,
-	ValueBoolFalse,
-	ValueBoolUnknown,
+	True,
+	False,
+	Unknown,
 }
 
 struct ValuePossibilities<'a,T:ValueType+'static>
 {
 	val: &'a Value<T>,
-	idx: uint,
+	idx: usize,
 }
 
 impl<T: ValueType> Value<T>
@@ -51,19 +53,19 @@ impl<T: ValueType> Value<T>
 	// ---
 	/// Completely unknown value
 	pub fn unknown() -> Value<T> {
-		ValueUnknown
+		Value::Unknown
 	}
 	/// Fully known value
 	pub fn known(val: T) -> Value<T> {
-		ValueKnown(val)
+		Value::Known(val)
 	}
 	/// Fully known zero (shortcut)
 	pub fn zero() -> Value<T> {
-		ValueKnown( Zero::zero() )
+		Value::Known( Int::zero() )
 	}
 	/// Fully known negative one (shortcut)
 	pub fn ones() -> Value<T> {
-		ValueKnown( Value::<T>::ones_raw() )
+		Value::Known( Value::<T>::ones_raw() )
 	}
 	//// A set of possible values
 	//pub fn set(vals: Vec<T>) -> Value<T> {
@@ -71,12 +73,10 @@ impl<T: ValueType> Value<T>
 	//}
 	
 	fn ones_raw() -> T {
-		let bs = ::std::mem::size_of::<T>() * 8;
-		let top: T = NumCast::from( 1u64 << (bs-1) ).unwrap();
-		top | (!top)
+		Int::max_value()
 	}
 	
-	fn _bitsize() -> uint {
+	fn _bitsize() -> usize {
 		::std::mem::size_of::<T>() * 8
 	}
 	
@@ -110,17 +110,17 @@ impl<T: ValueType> Value<T>
 		assert_eq!( ::std::mem::size_of::<U>() * 2, ::std::mem::size_of::<T>() );
 		match (left,right)
 		{
-		(ValueKnown(a),ValueKnown(b)) => {
+		(Value::Known(a),Value::Known(b)) => {
 			let a_u: T = NumCast::from(a).unwrap();
 			let b_u: T = NumCast::from(b).unwrap();
-			ValueKnown(a_u | b_u << 8*::std::mem::size_of::<U>())
+			Value::Known(a_u | b_u << 8*::std::mem::size_of::<U>())
 			}
-		_ => ValueUnknown,	// TODO: Handle mask+value (or similar)
+		_ => Value::Unknown,	// TODO: Handle mask+value (or similar)
 		}
 	}
 	
 	/// Return the number of bits in the type
-	pub fn bitsize(&self) -> uint {
+	pub fn bitsize(&self) -> usize {
 		::std::mem::size_of::<T>() * 8
 	}
 	
@@ -129,11 +129,11 @@ impl<T: ValueType> Value<T>
 	{
 		match self
 		{
-		&ValueKnown(a) => {
+		&Value::Known(a) => {
 			let a_u: U = Value::<U>::cast(a);
-			ValueKnown(a_u)
+			Value::Known(a_u)
 			}
-		&ValueUnknown => ValueUnknown,
+		&Value::Unknown => Value::Unknown,
 		}
 	}
 	pub fn zero_extend<U: ValueType>(&self) -> Value<U> { self.truncate() }
@@ -143,7 +143,7 @@ impl<T: ValueType> Value<T>
 	{
 		match self
 		{
-		&ValueKnown(v) => Some(v),
+		&Value::Known(v) => Some(v),
 		_ => None,
 		}
 	}
@@ -152,8 +152,8 @@ impl<T: ValueType> Value<T>
 	{
 		match self
 		{
-		&ValueUnknown => false,
-		&ValueKnown(_) => true,
+		&Value::Unknown => false,
+		&Value::Known(_) => true,
 		}
 	}
 	
@@ -167,19 +167,19 @@ impl<T: ValueType> Value<T>
 	}
 	
 	/// Fetch the value of the specified bit
-	pub fn bit(&self, pos: uint) -> ValueBool
+	pub fn bit(&self, pos: usize) -> ValueBool
 	{
-		let one: T = NumCast::from(1u).unwrap();
+		let one: T = Int::one();
 		let mask = one << pos;
 		match self
 		{
-		&ValueUnknown => ValueBoolUnknown,
-		&ValueKnown(v) =>
-			if v & mask != Zero::zero() {
-				ValueBoolTrue
+		&Value::Unknown => ValueBool::Unknown,
+		&Value::Known(v) =>
+			if v & mask != Int::zero() {
+				ValueBool::True
 			}
 			else {
-				ValueBoolFalse
+				ValueBool::False
 			},
 		}
 	}
@@ -189,117 +189,136 @@ impl<T: ValueType> Value<T>
 // Operations on unknown values
 // --------------------------------------------------------------------
 /// Add two values
-impl<T: ValueType> ::std::ops::Add<Value<T>,Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::Add for Value<T>
 {
-	fn add(&self, other: &Value<T>) -> Value<T>
+	type Output = Value<T>;
+	fn add(self, other: Value<T>) -> Value<T>
 	{
+		if let Some(v) = self.val_known() {
+			if v == Int::zero() {
+				return other;
+			}
+		}
+		if let Some(v) = other.val_known() {
+			if v == Int::zero() {
+				return self;
+			}
+		}
 		match (self, other)
 		{
-		(_,&ValueKnown(v)) if v == Zero::zero() => *self,
-		(&ValueKnown(v),_) if v == Zero::zero() => *other,
-		(&ValueUnknown,_) => ValueUnknown,
-		(_,&ValueUnknown) => ValueUnknown,
-		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a+b),
+		(Value::Unknown,_) => Value::Unknown,
+		(_,Value::Unknown) => Value::Unknown,
+		(Value::Known(a),Value::Known(b)) => Value::Known(a+b),
 		}
 	}
 }
 /// Subtract two values
-impl<T: ValueType> ::std::ops::Sub<Value<T>,Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::Sub for Value<T>
 {
-	fn sub(&self, other: &Value<T>) -> Value<T>
+	type Output = Value<T>;
+	fn sub(self, other: Value<T>) -> Value<T>
 	{
+		if let Some(v) = other.val_known() {
+			if v == Int::zero() {
+				// - Subtracting nothing, pass value through unmolested
+				return self;
+			}
+		}
 		match (self, other)
 		{
-		// - Subtracting nothing, pass value through unmolested
-		(_,&ValueKnown(v)) if v == Zero::zero() => *self,
 		// - Pure unknown poisons
-		(&ValueUnknown,_) => ValueUnknown,
-		(_,&ValueUnknown) => ValueUnknown,
+		(Value::Unknown,_) => Value::Unknown,
+		(_,Value::Unknown) => Value::Unknown,
 		// - Known resolves
-		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a-b),
+		(Value::Known(a),Value::Known(b)) => Value::Known(a-b),
 		}
 	}
 }
 /// Multiply two values
 /// Returns a pair of values - Upper and lower parts of the result
-impl<T: ValueType> ::std::ops::Mul<Value<T>,(Value<T>,Value<T>)> for Value<T>
+impl<T: ValueType> ::std::ops::Mul for Value<T>
 {
-	fn mul(&self, other: &Value<T>) -> (Value<T>,Value<T>)
+	type Output = (Value<T>, Value<T>);
+	fn mul(self, other: Value<T>) -> (Value<T>,Value<T>)
 	{
 		match (self, other)
 		{
 		// Either being zero causes the result to be zero
-		(_,&ValueKnown(v)) if v == Zero::zero() => (Value::zero(),Value::zero()),
-		(&ValueKnown(v),_) if v == Zero::zero() => (Value::zero(),Value::zero()),
+		(_,Value::Known(v)) if v == Int::zero() => (Value::zero(),Value::zero()),
+		(Value::Known(v),_) if v == Int::zero() => (Value::zero(),Value::zero()),
 		// Otherwise, unknown values are poisonous
-		(&ValueUnknown,_) => (ValueUnknown,ValueUnknown),
-		(_,&ValueUnknown) => (ValueUnknown,ValueUnknown),
+		(Value::Unknown,_) => (Value::Unknown,Value::Unknown),
+		(_,Value::Unknown) => (Value::Unknown,Value::Unknown),
 		// But known values are fixed
-		(&ValueKnown(a),&ValueKnown(b)) => {
+		(Value::Known(a),Value::Known(b)) => {
 			if a*b < a || a*b < b {
 				error!("TODO: Handle overflow in value multiply");
 			}
-			(Value::zero(),ValueKnown(a*b))
+			(Value::zero(),Value::Known(a*b))
 			},
 		}
 	}
 }
 /// Bitwise AND
-impl<T: ValueType> ::std::ops::BitAnd<Value<T>,Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::BitAnd for Value<T>
 {
-	fn bitand(&self, other: &Value<T>) -> Value<T>
+	type Output = Value<T>;
+	fn bitand(self, other: Value<T>) -> Value<T>
 	{
 		// TODO: Restrict range of unknown
 		match (self, other)
 		{
 		// - Zero nukes result
-		(_,&ValueKnown(v)) if v == Zero::zero() => Value::zero(),
-		(&ValueKnown(v),_) if v == Zero::zero() => Value::zero(),
+		(_,Value::Known(v)) if v == Int::zero() => Value::zero(),
+		(Value::Known(v),_) if v == Int::zero() => Value::zero(),
 		// - Pure unkown poisons
-		(&ValueUnknown,_) => ValueUnknown,
-		(_,&ValueUnknown) => ValueUnknown,
+		(Value::Unknown,_) => Value::Unknown,
+		(_,Value::Unknown) => Value::Unknown,
 		// - Known resolves
-		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a&b),
+		(Value::Known(a),Value::Known(b)) => Value::Known(a&b),
 		}
 	}
 }
 /// Bitwise OR
-impl<T: ValueType> ::std::ops::BitOr<Value<T>,Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::BitOr for Value<T>
 {
-	fn bitor(&self, other: &Value<T>) -> Value<T>
+	type Output = Value<T>;
+	fn bitor(self, other: Value<T>) -> Value<T>
 	{
 		// TODO: Restrict range of unknown
 		match (self, other)
 		{
-		(&ValueUnknown,_) => ValueUnknown,
-		(_,&ValueUnknown) => ValueUnknown,
-		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a|b),
+		(Value::Unknown,_) => Value::Unknown,
+		(_,Value::Unknown) => Value::Unknown,
+		(Value::Known(a),Value::Known(b)) => Value::Known(a|b),
 		}
 	}
 }
 /// Bitwise Exclusive OR
-impl<T: ValueType> ::std::ops::BitXor<Value<T>,Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::BitXor for Value<T>
 {
-	fn bitxor(&self, other: &Value<T>) -> Value<T>
+	type Output = Value<T>;
+	fn bitxor(self, other: Value<T>) -> Value<T>
 	{
 		match (self, other)
 		{
-		(&ValueUnknown,_) => ValueUnknown,
-		(_,&ValueUnknown) => ValueUnknown,
-		(&ValueKnown(a),&ValueKnown(b)) => ValueKnown(a^b),
+		(Value::Unknown,_) => Value::Unknown,
+		(_,Value::Unknown) => Value::Unknown,
+		(Value::Known(a),Value::Known(b)) => Value::Known(a^b),
 		}
 	}
 }
 
 /// Unary NOT (bitwise)
-impl<T: ValueType> ::std::ops::Not<Value<T>> for Value<T>
+impl<T: ValueType> ::std::ops::Not for Value<T>
 {
-	fn not(&self) -> Value<T>
+	type Output = Value<T>;
+	fn not(self) -> Value<T>
 	{
 		match self
 		{
-		&ValueUnknown => ValueUnknown,
-		&ValueKnown(a) => ValueKnown(!a),
+		Value::Unknown => Value::Unknown,
+		Value::Known(a) => Value::Known(!a),
 		}
 	}
 }
@@ -307,22 +326,23 @@ impl<T: ValueType> ::std::ops::Not<Value<T>> for Value<T>
 /// Logical Shift Left
 /// Returns (ShiftedBits, Result)
 /// - ShiftedBits are in the lower bits of the value (e.g. -1 << 1 will have the bottom bit set)
-impl<T: ValueType> ::std::ops::Shl<uint,(Value<T>,Value<T>)> for Value<T>
+impl<T: ValueType> ::std::ops::Shl<usize> for Value<T>
 {
-	fn shl(&self, &rhs: &uint) -> (Value<T>,Value<T>)
+	type Output = (Value<T>,Value<T>);
+	fn shl(self, rhs: usize) -> (Value<T>,Value<T>)
 	{
 		if rhs == self.bitsize() {
-			(*self,Value::zero())
+			(self,Value::zero())
 		}
 		else if rhs == 0 {
-			(Value::zero(),*self)
+			(Value::zero(),self)
 		}
 		else {
 			match self
 			{
-			&ValueKnown(a) => (ValueKnown(a>>(self.bitsize()-rhs)), ValueKnown(a<<rhs)),
+			Value::Known(a) => (Value::Known(a>>(self.bitsize()-rhs)), Value::Known(a<<rhs)),
 			// TODO: Return a pair of masked values
-			_ => (ValueUnknown,ValueUnknown),
+			_ => (Value::Unknown,Value::Unknown),
 			}
 		}
 	}
@@ -330,73 +350,80 @@ impl<T: ValueType> ::std::ops::Shl<uint,(Value<T>,Value<T>)> for Value<T>
 /// Logical Shift Right
 /// Returns (ShiftedBits, Result)
 /// - ShiftedBits are in the upper bits of the value (e.g. 1 >> 1 will have the top bit set)
-impl<T: ValueType> ::std::ops::Shr<uint,(Value<T>,Value<T>)> for Value<T>
+impl<T: ValueType> ::std::ops::Shr<usize> for Value<T>
 {
-	fn shr(&self, &rhs: &uint) -> (Value<T>,Value<T>)
+	type Output = (Value<T>, Value<T>);
+	fn shr(self, rhs: usize) -> (Value<T>,Value<T>)
 	{
 		if rhs > self.bitsize() {
-			error!("SHR {} by {} outside of max shift ({}), clamping", self, rhs, self.bitsize());
-			(*self,Value::zero())
+			error!("SHR {:?} by {} outside of max shift ({}), clamping", self, rhs, self.bitsize());
+			(self,Value::zero())
 		}
 		else if rhs == self.bitsize() {
-			(*self,Value::zero())
+			(self,Value::zero())
 		}
 		else if rhs == 0 {
-			(Value::zero(),*self)
+			(Value::zero(),self)
 		}
 		else {
 			match self
 			{
-			&ValueKnown(a) => (ValueKnown(a<<(self.bitsize()-rhs)), ValueKnown(a>>rhs)),
+			Value::Known(a) => (Value::Known(a<<(self.bitsize()-rhs)), Value::Known(a>>rhs)),
 			// TODO: Return a pair of masked values
-			_ => (ValueUnknown,ValueUnknown),
+			_ => (Value::Unknown,Value::Unknown),
 			}
 		}
 	}
 }
 
+//*
+impl<T: ValueType> ::std::cmp::PartialEq for Value<T>
+{
+	fn eq(&self, other: &Value<T>) -> bool
+	{
+		match (self,other)
+		{
+		(&Value::Unknown,_) => false,
+		(_,&Value::Unknown) => false,
+		(&Value::Known(a),&Value::Known(b)) => a == b,
+		}
+	}
+}
 impl<T: ValueType> ::std::cmp::PartialOrd for Value<T>
 {
 	fn partial_cmp(&self, other: &Value<T>) -> Option<Ordering>
 	{
 		match (self,other)
 		{
-		(&ValueUnknown,_) => None,
-		(_,&ValueUnknown) => None,
-		(&ValueKnown(a),&ValueKnown(b)) => a.partial_cmp(&b),
+		(&Value::Unknown,_) => None,
+		(_,&Value::Unknown) => None,
+		(&Value::Known(a),&Value::Known(b)) => a.partial_cmp(&b),
 		}
 	}
 }
-//impl<T: ValueType> ::std::cmp::PartialEq for Value<T>
-//{
-//	fn eq(&self, other: &Value<T>) -> Value<T>
-//	{
-//		match (self,other)
-//		{
-//		}
-//	}
-//}
+// */
 
 impl<T: ValueType> ::std::fmt::Show for Value<T>
 {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
 		match self
 		{
-		&ValueUnknown => write!(f, "?"),
-		&ValueKnown(v) => write!(f, "{:#x}", v),
+		&Value::Unknown => write!(f, "?"),
+		&Value::Known(v) => write!(f, "{:#x}", v),
 		}
 	}
 }
 
-impl<'a,T: ValueType> Iterator<T> for ValuePossibilities<'a,T>
+impl<'a,T: ValueType> Iterator for ValuePossibilities<'a,T>
 {
+	type Item = T;
 	fn next(&mut self) -> Option<T>
 	{
 		let rv = match self.val
 			{
-			&ValueUnknown => panic!("Can't get possibilities for an unknown value"),
-			&ValueKnown(v) => {
+			&Value::Unknown => panic!("Can't get possibilities for an unknown value"),
+			&Value::Known(v) => {
 				if self.idx == 0 { Some(v) } else { None }
 				},
 			};

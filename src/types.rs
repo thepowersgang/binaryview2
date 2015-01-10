@@ -9,22 +9,22 @@ pub struct TypeMap
 	structs: HashMap<String,Struct>
 }
 
-#[deriving(Show)]
+#[derive(Show)]
 pub enum InnerType
 {
-	TypeInt(u8),
-	TypeStruct(String),
-	TypeString(String),
+	Int(u8),
+	Struct(String),
+	String(String),
 }
 
-#[deriving(Show)]
+#[derive(Show)]
 pub enum Type
 {
-	TypeLit(InnerType),
-	TypePointer(u8,InnerType),
+	Lit(InnerType),
+	Pointer(u8,InnerType),
 }
 
-#[deriving(Show)]
+#[derive(Show)]
 struct Struct
 {
 	fields: Vec< (String,Type) >,
@@ -42,12 +42,11 @@ impl TypeMap
 	
 	pub fn new_struct(&mut self, name: &str) -> Result<&mut Struct,()>
 	{
+		use std::collections::hash_map::Entry;
 		match self.structs.entry(String::from_str(name))
 		{
-		::std::collections::hashmap::Occupied(_) => Err( () ),
-		::std::collections::hashmap::Vacant(e) => {
-			Ok( e.set( Struct::new() ) )
-			},
+		Entry::Occupied(_) => Err( () ),
+		Entry::Vacant(e) => Ok( e.insert( Struct::new() ) ),
 		}
 	}
 	
@@ -56,18 +55,17 @@ impl TypeMap
 		//debug!("self.structs = {}", self.structs);
 		match name
 		{
-		"void" => Ok( ::types::TypeInt(0) ),
-		"i8"  => Ok( ::types::TypeInt(1) ),
-		"i16" => Ok( ::types::TypeInt(2) ),
-		"i32" => Ok( ::types::TypeInt(3) ),
-		"u8"  => Ok( ::types::TypeInt(1) ),
-		"u16" => Ok( ::types::TypeInt(2) ),
-		"u32" => Ok( ::types::TypeInt(3) ),
+		"void" => Ok( InnerType::Int(0) ),
+		"i8"  => Ok( InnerType::Int(1) ),
+		"i16" => Ok( InnerType::Int(2) ),
+		"i32" => Ok( InnerType::Int(3) ),
+		"u8"  => Ok( InnerType::Int(1) ),
+		"u16" => Ok( InnerType::Int(2) ),
+		"u32" => Ok( InnerType::Int(3) ),
 		_ => {
-			let key = String::from_str(name);
-			match self.structs.find(&key)
+			match self.structs.get(name)
 			{
-			Some(_) => Ok( ::types::TypeStruct(key) ),
+			Some(_) => Ok( InnerType::Struct( String::from_str(name) ) ),
 			None => Err( () ),
 			}
 			}

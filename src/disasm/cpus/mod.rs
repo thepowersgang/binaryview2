@@ -5,7 +5,7 @@
 mod x86;
 mod arm;
 
-pub fn pick(name: &str) -> Option<&'static super::CPU + 'static>
+pub fn pick(name: &str) -> Option<&'static (super::CPU + 'static)>
 {
 	match name
 	{

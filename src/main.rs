@@ -1,6 +1,7 @@
 //
 //
 //
+#![feature(box_syntax)]
 
 #[macro_use] extern crate log;
 extern crate getopts;
@@ -15,16 +16,17 @@ mod disasm;	// Disassembler
 //mod analyse;	// Analysis of the disassembled code (to produce more addresses, and get functions)
 mod parse;	// Configuration parsing
 
-static MAX_LOOPS: uint = 32;	// Maximum number of passes during disassembly+processing
+static MAX_LOOPS: usize = 32;	// Maximum number of passes during disassembly+processing
 
 fn main()
 {
+	let str_args = ::std::os::args();
 	// - Parse arguments
 	let opts = [
 		getopts::optopt("m", "memmap", "Set memory map filename", "FILE"),
 		getopts::optopt("t", "types", "Set type list filename", "FILE"),
 		];
-	let args = match getopts::getopts(::std::os::args().slice_from(1), opts)
+	let args = match getopts::getopts(str_args.tail(), &opts)
 		{
 		Ok(v) => v,
 		Err(reason) => panic!(reason.to_string()),
@@ -79,7 +81,7 @@ fn main()
 		disasm.convert_from(addr, mode);
 	}
 	// > Loop until no change in state happens, or a maximum iteration count is hit
-	let mut pass_count = 0u;
+	let mut pass_count = 0;
 	while pass_count < MAX_LOOPS
 	{
 		pass_count += 1;
@@ -107,13 +109,14 @@ fn main()
 
 struct WriterWrapper<T:Writer>(T);
 
-impl<T:Writer> ::std::fmt::FormatWriter for WriterWrapper<T> {
-	fn write(&mut self, bytes: &[u8]) -> Result<(), ::std::fmt::FormatError> {
-		let &WriterWrapper(ref mut w) = self;
-		match w.write(bytes)
+impl<T:Writer> ::std::fmt::Writer for WriterWrapper<T>
+{
+	fn write_str(&mut self, bytes: &str) -> ::std::fmt::Result
+	{
+		match self.0.write_str(bytes)
 		{
 		Ok(_) => Ok( () ),
-		Err(_) => Err( ::std::fmt::WriteError ),
+		Err(_) => Err( ::std::fmt::Error ),
 		}
 	}
 }
