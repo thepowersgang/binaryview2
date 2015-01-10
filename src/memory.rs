@@ -76,13 +76,13 @@ impl MemoryState
 	{
 		let pos = match self.regions.as_slice().binary_search(|r| r.start.cmp(&base))
 			{
-			Found(_) => fail!("region overlap"),
+			Found(_) => panic!("region overlap"),
 			NotFound(idx) => {
 				if idx > 0 && base < self.regions[idx-1].start + self.regions[idx-1].size as u64 {
-					fail!("region overlap");
+					panic!("region overlap");
 				}
 				if idx < self.regions.len() && base + size as u64 > self.regions[idx].start {
-					fail!("region overlap");
+					panic!("region overlap");
 				}
 				idx
 				}
@@ -103,7 +103,7 @@ impl MemoryState
 		
 		// 1. 'filesize' must be a divisor of 'size'
 		if size as u64 / filesize * filesize != size as u64 {
-			fail!("Unable to map ROM at {:#x}, provided file doesn't fit neatly", base);
+			panic!("Unable to map ROM at {:#x}, provided file doesn't fit neatly", base);
 		}
 		
 		// 2. Load data!
@@ -162,16 +162,16 @@ impl MemoryState
 	}
 	
 	pub fn write_u8(&self, addr: u64, val: Value<u8>) {
-		fail!("TODO: MemoryState.write_u8(addr={},val={})", addr, val);
+		panic!("TODO: MemoryState.write_u8(addr={},val={})", addr, val);
 	}
 	pub fn write_u16(&self, addr: u64, val: Value<u16>) {
-		fail!("TODO: MemoryState.write_u16(addr={},val={})", addr, val);
+		panic!("TODO: MemoryState.write_u16(addr={},val={})", addr, val);
 	}
 	pub fn write_u32(&self, addr: u64, val: Value<u32>) {
-		fail!("TODO: MemoryState.write_u32(addr={},val={})", addr, val);
+		panic!("TODO: MemoryState.write_u32(addr={},val={})", addr, val);
 	}
 	pub fn write_u64(&self, addr: u64, val: Value<u64>) {
-		fail!("TODO: MemoryState.write_u64(addr={},val={})", addr, val);
+		panic!("TODO: MemoryState.write_u64(addr={},val={})", addr, val);
 	}
 }
 

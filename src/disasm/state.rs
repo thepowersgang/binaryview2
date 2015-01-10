@@ -39,7 +39,7 @@ struct StateData
 	/// Real registers - Static vector
 	registers: Vec<Value<u64>>,
 	/// Temporary registers
-	tmpregs: [Value<u64>,..NUM_TMPREGS],
+	tmpregs: [Value<u64>; NUM_TMPREGS],
 	
 	/// Stack - Dynamic vector
 	stack: Vec<Value<u64>>,
@@ -118,7 +118,7 @@ impl<'mem> State<'mem>
 			assert!( (r as uint) < NUM_TMPREGS );
 			self.data.tmpregs[r as uint] = val;
 			},
-		ParamImmediate(_) => fail!("Setting an immediate"),
+		ParamImmediate(_) => panic!("Setting an immediate"),
 		}
 	}
 	
@@ -141,7 +141,7 @@ impl<'mem> State<'mem>
 			}
 			else if addr.is_fixed_set()
 			{
-				fail!("TODO: Support generating set of data from read");
+				panic!("TODO: Support generating set of data from read");
 				//Value::<T>::unknown()
 			}
 			else

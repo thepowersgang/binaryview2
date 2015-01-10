@@ -6,9 +6,9 @@ use utf8reader::UTF8Reader;
 mod lexer;
 
 macro_rules! assert_token{
-	($pat:pat : $val:expr : $tok:expr : $name:expr) => (match $tok { $pat => $val, tok @ _ => return Err( format!("Unexpected {}, expected {}", tok, $name) )});
-	(lexer::$pat:ident($val:ident) = $tok:expr) => (assert_token!(lexer::$pat($val) : ($val) : $tok : stringify!($pat)));
-	(lexer::$pat:ident = $tok:expr) => (assert_token!(lexer::$pat : () : $tok : stringify!($pat)));
+	($pat:pat , $val:expr , $tok:expr , $name:expr) => (match $tok { $pat => $val, tok @ _ => return Err( format!("Unexpected {}, expected {}", tok, $name) )});
+	(lexer::$pat:ident($val:ident) = $tok:expr) => (assert_token!(lexer::$pat($val) , ($val) , $tok , stringify!($pat)));
+	(lexer::$pat:ident = $tok:expr) => (assert_token!(lexer::$pat , () , $tok , stringify!($pat)));
 }
 
 pub fn get_tok(lex: &mut lexer::Lexer) -> Result<lexer::Token,String>

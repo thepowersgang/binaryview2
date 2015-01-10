@@ -138,7 +138,7 @@ impl<'a> Lexer<'a>
 				'n' => ret.push('\n'),
 				'r' => ret.push('\r'),
 				'\n' => (),
-				_ => fail!("Unexpected escape code in string '\\{}'", codechar)
+				_ => panic!("Unexpected escape code in string '\\{}'", codechar)
 				}
 			}
 			else {

@@ -5,7 +5,7 @@ use std::slice::{Found,NotFound};
 
 pub trait SortedList<T>
 {
-	fn find_ins<'a>(&'a mut self, sort: |&T|->Ordering) -> VecInsertPos<'a,T>;
+	fn find_ins<'a>(&'a mut self, sort: &mut FnMut<(&T), Ordering>) -> VecInsertPos<'a,T>;
 }
 
 pub struct VecInsertPos<'a,T:'a>
@@ -16,7 +16,7 @@ pub struct VecInsertPos<'a,T:'a>
 
 impl<T> SortedList<T> for Vec<T>
 {
-	fn find_ins<'s>(&'s mut self, order: |&T|->Ordering) -> VecInsertPos<'s,T>
+	fn find_ins<'s, F: Fn(&T)->Ordering>(&'s mut self, order: F) -> VecInsertPos<'s,T>
 	{
 		let pos = match self.as_mut_slice().binary_search(order)
 			{

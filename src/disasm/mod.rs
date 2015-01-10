@@ -8,7 +8,7 @@ use self::block::Block;
 use sortedlist::SortedList;	// Allows treating of collection types as sorted lists
 use std::collections::HashSet;
 
-mod common_instrs;
+#[macro_use] mod common_instrs;
 mod state;
 mod microcode;
 mod instruction;

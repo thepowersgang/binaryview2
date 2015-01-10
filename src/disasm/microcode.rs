@@ -25,7 +25,7 @@ macro_rules! def_ucode{
 	};
 }
 
-def_ucode!(LOAD, UCodeLoad, (state, size, params) => {
+def_ucode!{LOAD, UCodeLoad, (state, size, params) => {
 	{
 		let addr = state.get(params[1]);
 		// Handle zero-extending the value to 64 bits
@@ -55,9 +55,9 @@ def_ucode!(LOAD, UCodeLoad, (state, size, params) => {
 		}
 		state.set(params[0], Value::unknown());
 	};
-})
+}}
 
-def_ucode!(STORE, UCodeStore, (state, size, params) => {
+def_ucode!{STORE, UCodeStore, (state, size, params) => {
 	{
 		let addr = state.get(params[1]);
 		let val = state.get(params[0]);
@@ -90,7 +90,7 @@ def_ucode!(STORE, UCodeStore, (state, size, params) => {
 			//state.set(params[0], Value::unknown());
 		}
 	};
-})
+}}
 
 // vim: ft=rust
 

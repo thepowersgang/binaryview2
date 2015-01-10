@@ -116,7 +116,7 @@ impl ::std::fmt::Show for Instruction
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> Result<(),::std::fmt::FormatError>
 	{
-		try!( write!(f, "[{}:{:8x}]+{:u} ", self.mode, self.base, self.len) );
+		try!( write!(f, "[{}:{:8x}]+{} ", self.mode, self.base, self.len) );
 		try!( write!(f, "{{{}}}:{:x} {} ", self.opsize, self.condition, self.class.name()) );
 		try!( self.class.print(f, self.params.as_slice()) );
 		Ok( () )
@@ -131,7 +131,7 @@ impl InstrParam
 		match self
 		{
 		&ParamImmediate(v) => v,
-		_ => fail!("Expected immediate value, got {}", self),
+		_ => panic!("Expected immediate value, got {}", self),
 		}
 	}
 }
@@ -164,7 +164,7 @@ impl ::std::fmt::Show for InstrSize
 	}
 }
 
-def_instr!(INVALID, IClassInvalid, (f,i,p,s) => {
+def_instr!{INVALID, IClassInvalid, (f,i,p,s) => {
 	{ true };
 	{ write!(f, "--") };
 	{
@@ -175,6 +175,6 @@ def_instr!(INVALID, IClassInvalid, (f,i,p,s) => {
 		let _ = p;
 		let _ = s;
 	};
-})
+}}
 
 // vim: ft=rust

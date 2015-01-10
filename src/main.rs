@@ -1,12 +1,8 @@
 //
 //
 //
-//#![feature(associated_types)]
-#![feature(phase)]
-#![feature(macro_rules)]
-#![feature(if_let)]
 
-#[phase(plugin,link)] extern crate log;
+#[macro_use] extern crate log;
 extern crate getopts;
 extern crate utf8reader;	// 'thepowersgang/rust-utf8reader' - Provides an inline UTF-8 decoder
 
@@ -31,7 +27,7 @@ fn main()
 	let args = match getopts::getopts(::std::os::args().slice_from(1), opts)
 		{
 		Ok(v) => v,
-		Err(reason) => fail!(reason.to_string()),
+		Err(reason) => panic!(reason.to_string()),
 		};
 	let typesfile = args.opt_str("types").unwrap_or( String::from_str("types.txt") );
 	let mapfile = args.opt_str("memmap").unwrap_or( String::from_str("memorymap.txt") );
@@ -41,11 +37,11 @@ fn main()
 		let ident = s.next().unwrap();
 		let path = match s.next() {
 			Some(x) => x,
-			None => fail!("ERROR: Free arguments should be of the form '<name>=<path>', got '{}'", p),
+			None => panic!("ERROR: Free arguments should be of the form '<name>=<path>', got '{}'", p),
 			};
 		let file = match ::std::io::File::open(&::std::path::Path::new(path)) {
 			Ok(x) => x,
-			Err(e) => fail!("ERROR: Unable to open file '{}' for reading. Reason: {}", path, e)
+			Err(e) => panic!("ERROR: Unable to open file '{}' for reading. Reason: {}", path, e)
 			};
 		(String::from_str(ident), file)
 		}).collect();
@@ -71,7 +67,7 @@ fn main()
 	let cpu = match disasm::cpus::pick("arm")
 		{
 		Some(x) => x,
-		None => fail!("Unknown CPU type"),
+		None => panic!("Unknown CPU type"),
 		};
 	// ------------------------------------------------------------
 	// Run disassembler

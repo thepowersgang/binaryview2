@@ -40,7 +40,7 @@ impl ::disasm::CPU for ArmCpu
 			{
 			0 => addr + 8,		// ARM mode
 			1 => addr + 4 + 1,	// THUMB mode
-			_ => fail!("Invalid ARM mode"),
+			_ => panic!("Invalid ARM mode"),
 			};
 		state.set( ParamTrueReg(15), Value::known(pc_val) );
 	}
@@ -51,7 +51,7 @@ impl ::disasm::CPU for ArmCpu
 		{
 		0 => disassemble_arm(mem, addr),
 		1 => disassemble_thumb(mem, addr),
-		_ => fail!("Invalid ARM mode"),
+		_ => panic!("Invalid ARM mode"),
 		}
 	}
 	
@@ -71,7 +71,7 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<Instruction
 			error!("TODO: Unconditional instructions");
 			return Err( () );
 			},
-		v @ _ => fail!("Invalid (impossible) condition code in ARM {:x}", v),
+		v @ _ => panic!("Invalid (impossible) condition code in ARM {:x}", v),
 		};
 	
 	let op = ((word>>20 & 0xFF) << 4) | (word>>4 & 0xf);
@@ -123,7 +123,7 @@ fn disassemble_arm(mem: &::memory::MemoryState, addr: u64) -> Result<Instruction
 		let Rd = ((word >> 12) & 0xF) as u8;
 		if Rd == 15 {
 			// TODO: Handle moving to R15 (aka PC)
-			fail!("TODO: Handle move immediate to PC");
+			panic!("TODO: Handle move immediate to PC");
 		}
 		Instruction::new(
 			4, ccode, InstrSize32,
@@ -250,7 +250,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 				0xc => &common_instrs::OR  as &InstructionClass,
 				0xd => &common_instrs::MUL as &InstructionClass,
 				0xe => &instrs::BIC        as &InstructionClass,
-				_ => fail!("ARM THUMB 0x10:{{0-7,c-e}} Unmatched {}", v)
+				_ => panic!("ARM THUMB 0x10:{{0-7,c-e}} Unmatched {}", v)
 				},
 				vec![ reg_t(word, 0), reg_t(word,0), reg_t(word,3) ]
 			),
@@ -278,7 +278,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 			2, COND_ALWAYS, InstrSize32, &common_instrs::NOT,
 			vec![ reg_t(word, 0), reg_t(word,3) ]
 			),
-		v @ _ => fail!("ARM THUMB 0x10 Unmatched {:x}", v)
+		v @ _ => panic!("ARM THUMB 0x10 Unmatched {:x}", v)
 		},
 	// 0x11: Special data instructions, branch and exchange
 	0x11 => {
@@ -439,7 +439,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 			2, COND_ALWAYS, InstrSizeNA, &instrs::SVC,
 			vec![ ParamImmediate(word.bits(0, 8) as u64) ]
 			),
-		_ => fail!(""),
+		_ => panic!(""),
 		},
 	// B imm11
 	0x38 ... 0x39 => Instruction::new(
@@ -549,7 +549,7 @@ fn disassemble_thumb(mem: &::memory::MemoryState, addr: u64) -> Result<Instructi
 				return Err( () );
 			}
 			},
-		_ => fail!("impossible (thumb 3F)"),
+		_ => panic!("impossible (thumb 3F)"),
 		}
 		},
 	v @ _ => {
@@ -612,13 +612,13 @@ mod instrs
 	use disasm::instruction::{InstrParam,ParamImmediate,ParamTrueReg};
 
 	// Set system register
-	def_instr!(SET_SREG, InstrSetSReg, (f,instr,p,state) => {
+	def_instr!{SET_SREG, InstrSetSReg, (f,instr,p,state) => {
 		{ false };
 		{ write!(f, "SR{} {} {}", p[0], p[1], p[2]) };
 		{
 			let regid = match p[0] {
 				ParamImmediate(v) => v,
-				_ => fail!("Invalid type for param[0] of SET_SREG, {}", p[0]),
+				_ => panic!("Invalid type for param[0] of SET_SREG, {}", p[0]),
 				};
 			let val = state.get(p[1]);
 			warn!("TODO: Assign SReg {} value {}", regid, val);
@@ -626,9 +626,9 @@ mod instrs
 		{
 			unimplemented!();
 		};
-	})
+	}}
 	
-	def_instr!(SVC, InstrSVC, (f,instr,p,state) => {
+	def_instr!{SVC, InstrSVC, (f,instr,p,state) => {
 		{ false };
 		{ write!(f, "{}", p[0]) };
 		{
@@ -638,10 +638,10 @@ mod instrs
 		{
 			unimplemented!();
 		};
-	})
-	
+	}}
+		
 	// Branch+Exchange
-	def_instr!(BX, InstrBX, (f,instr,p,state) => {
+	def_instr!{BX, InstrBX, (f,instr,p,state) => {
 		{ true };
 		{ write!(f, "{}", p[0]) };
 		{
@@ -662,12 +662,12 @@ mod instrs
 		};
 		{
 			let _ = p; let _ = state;
-			fail!("Can't reverse BX");
+			panic!("Can't reverse BX");
 		};
-	})
+	}}
 	
 	// Branch+Link+Exchange
-	def_instr!(BLX, InstrBLX, (f,instr,p,state) => {
+	def_instr!{BLX, InstrBLX, (f,instr,p,state) => {
 		{ true };
 		{ write!(f, "{}", p[0]) };
 		{
@@ -680,10 +680,10 @@ mod instrs
 			let _ = state;
 			unimplemented!();
 		};
-	})
+	}}
 	
 	// Push multiple (bitmask)
-	def_instr!(PUSH_M, InstrPushMulti, (f,instr,p,state) => {
+	def_instr!{PUSH_M, InstrPushMulti, (f,instr,p,state) => {
 		{ false };
 		{
 			let mask = p[0].immediate();
@@ -710,10 +710,10 @@ mod instrs
 			let _ = state;
 			unimplemented!();
 		};
-	})
+	}}
 
 	// Pop multiple (bitmask)
-	def_instr!(POP_M, InstrPopMulti, (f,instr,p,state) => {
+	def_instr!{POP_M, InstrPopMulti, (f,instr,p,state) => {
 		{
 			let mask = p[0].immediate();
 			mask & (1 << 15) != 0
@@ -743,9 +743,9 @@ mod instrs
 			let _ = state;
 			unimplemented!();
 		};
-	})
+	}}
 	// Store multiple (bitmask)
-	def_instr!(STM, InstrSTM, (f,instr,p,state) => {
+	def_instr!{STM, InstrSTM, (f,instr,p,state) => {
 		{ false };
 		{
 			try!( write!(f, "{}", p[0]) );
@@ -776,9 +776,9 @@ mod instrs
 			let _ = state;
 			unimplemented!();
 		};
-	})
+	}}
 	// Store multiple (bitmask)
-	def_instr!(LDM, InstrLDM, (f,instr,p,state) => {
+	def_instr!{LDM, InstrLDM, (f,instr,p,state) => {
 		{ false };
 		{
 			try!( write!(f, "{}", p[0]) );
@@ -809,10 +809,10 @@ mod instrs
 			let _ = state;
 			unimplemented!();
 		};
-	})
+	}}
 
 	// ASR - Arithmetic Shift Right
-	def_instr!(ASR, IClassAsr, (f, instr, params, state) => {
+	def_instr!{ASR, IClassAsr, (f, instr, params, state) => {
 		{ false };
 		{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
 		{
@@ -846,11 +846,11 @@ mod instrs
 			}
 		};
 		{ unimplemented!(); };
-	})
+	}}
 
 	// BIC - Bit Clear
 	// AND with NOT of provided mask
-	def_instr!(BIC, IClassBic, (f, instr, params, state) => {
+	def_instr!{BIC, IClassBic, (f, instr, params, state) => {
 		{ false };
 		{ write!(f, "{}, {}, {}", params[0], params[1], params[2]) };
 		{
@@ -860,7 +860,7 @@ mod instrs
 			state.set(params[0], val);
 		};
 		{ unimplemented!(); };
-	})
+	}}
 }
 
 // vim: ft=rust

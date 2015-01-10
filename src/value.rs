@@ -94,7 +94,7 @@ impl<T: ValueType> Value<T>
 		{
 		Some(v) => v,
 		None => unsafe {
-			fail!("Unable to cast {:#x} from {} to {}",
+			panic!("Unable to cast {:#x} from {} to {}",
 				val,
 				(*::std::intrinsics::get_tydesc::<U>()).name,
 				(*::std::intrinsics::get_tydesc::<T>()).name
@@ -395,7 +395,7 @@ impl<'a,T: ValueType> Iterator<T> for ValuePossibilities<'a,T>
 	{
 		let rv = match self.val
 			{
-			&ValueUnknown => fail!("Can't get possibilities for an unknown value"),
+			&ValueUnknown => panic!("Can't get possibilities for an unknown value"),
 			&ValueKnown(v) => {
 				if self.idx == 0 { Some(v) } else { None }
 				},
