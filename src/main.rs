@@ -5,7 +5,6 @@
 
 #[macro_use] extern crate log;
 extern crate getopts;
-extern crate utf8reader;	// 'thepowersgang/rust-utf8reader' - Provides an inline UTF-8 decoder
 
 mod sortedlist;	// Trait - Provides a sorted list interface to generic types
 
@@ -37,10 +36,10 @@ fn main()
 	let mut infiles: std::collections::HashMap<String,::std::io::File> = args.free.iter().map(|p| {
 		let mut s = p.split('=');
 		let ident = s.next().unwrap();
-		let path = match s.next() {
-			Some(x) => x,
-			None => panic!("ERROR: Free arguments should be of the form '<name>=<path>', got '{}'", p),
-			};
+		let path = s.next().expect("ERROR: Free arguments should be of the form '<name>=<path>'");
+		if let Some(_) = s.next() {
+			panic!("ERROR: Free arguments should be of the form '<name>=<path>'");
+		}
 		let file = match ::std::io::File::open(&::std::path::Path::new(path)) {
 			Ok(x) => x,
 			Err(e) => panic!("ERROR: Unable to open file '{}' for reading. Reason: {}", path, e)
@@ -66,7 +65,7 @@ fn main()
 		).unwrap();
 	// - Select CPU
 	// TODO: Obtain CPU type from memory map
-	let cpu = match disasm::cpus::pick("arm")
+	let cpu = disasm::cpus::pick("arm")
 		{
 		Some(x) => x,
 		None => panic!("Unknown CPU type"),
@@ -76,7 +75,7 @@ fn main()
 	// ------------------------------------------------------------
 	// > Iterate entrypoints, running conversion (and obtaining further addresses to process)
 	let mut disasm = disasm::Disassembled::new(&memory, cpu);
-	for &(addr,mode) in entrypoints.iter()
+	for (addr,mode) in entrypoints.into_iter()
 	{
 		disasm.convert_from(addr, mode);
 	}

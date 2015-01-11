@@ -1,8 +1,6 @@
 //
 //
 //
-use utf8reader::UTF8Reader;
-
 mod lexer;
 
 macro_rules! assert_token{
