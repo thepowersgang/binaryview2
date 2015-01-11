@@ -33,14 +33,14 @@ type LexResult<T> = Result<T,()>;
 /// Core lexer type
 pub struct Lexer<'r>
 {
-	instream: &'r mut (Iterator<Item=IoResult<char>>+'r),
+	instream: &'r mut (Buffer+'r),
 	lastc: Option<char>,
 	saved_tok: Option<Token>,
 }
 
 impl<'a> Lexer<'a>
 {
-	pub fn new<'r>(instream: &'r mut (Iterator<Item=IoResult<char>>)) -> Lexer<'r> {
+	pub fn new<'r>(instream: &'r mut (Buffer+'r)) -> Lexer<'r> {
 		Lexer {
 			instream: instream,
 			lastc: None,
@@ -78,10 +78,14 @@ impl<'a> Lexer<'a>
 			self.lastc = None;
 			Ok( x )
 			},
-		None => match self.instream.next()
+		None => match self.instream.read_char()
 			{
-			Some(x) => Ok( match x { Ok(a)=>a,Err(_)=>return Err( () )} ),
-			None => Ok( '\0' )
+			Ok(x) => Ok( x ),
+			Err(e) => match e.kind
+				{
+				::std::io::EndOfFile => Ok( '\0' ),
+				_ => Err( () )
+				},
 			},
 		}
 	}

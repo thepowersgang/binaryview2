@@ -35,7 +35,7 @@ pub fn parse_memorymap(
 {
 	let mut entrypoints = Vec::new();
 	let fp = ::std::io::File::open(&::std::path::Path::new(path)).unwrap();
-	let mut reader = UTF8Reader::new(fp);
+	let mut reader = ::std::io::BufferedReader::new(fp);
 	let mut lex = lexer::Lexer::new( &mut reader );
 	
 	// read symbol, select action
@@ -146,7 +146,7 @@ pub fn parse_memorymap(
 pub fn parse_typemap(typemap: &mut ::types::TypeMap, path: &str) -> Result<(),String>
 {
 	let fp = ::std::io::File::open(&::std::path::Path::new(path)).unwrap();
-	let mut reader = UTF8Reader::new(fp);
+	let mut reader = ::std::io::BufferedReader::new(fp);
 	let mut lex = lexer::Lexer::new( &mut reader );
 	
 	loop
