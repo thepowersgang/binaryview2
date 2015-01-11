@@ -241,11 +241,26 @@ impl<T: ValueType> ::std::ops::Mul for Value<T>
 	type Output = (Value<T>, Value<T>);
 	fn mul(self, other: Value<T>) -> (Value<T>,Value<T>)
 	{
+		// Known values - Handle zero and one
+		if let Some(v) = other.val_known() {
+			if v == Int::zero() {
+				return (Value::zero(), Value::zero());
+			}
+			if v == Int::one() {
+				return (Value::zero(), self);
+			}
+		}
+		// Known values - Handle zero and one
+		if let Some(v) = self.val_known() {
+			if v == Int::zero() {
+				return (Value::zero(), Value::zero());
+			}
+			if v == Int::one() {
+				return (Value::zero(), other);
+			}
+		}
 		match (self, other)
 		{
-		// Either being zero causes the result to be zero
-		(_,Value::Known(v)) if v == Int::zero() => (Value::zero(),Value::zero()),
-		(Value::Known(v),_) if v == Int::zero() => (Value::zero(),Value::zero()),
 		// Otherwise, unknown values are poisonous
 		(Value::Unknown,_) => (Value::Unknown,Value::Unknown),
 		(_,Value::Unknown) => (Value::Unknown,Value::Unknown),

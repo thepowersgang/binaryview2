@@ -106,7 +106,7 @@ impl<'a> Disassembled<'a>
 		info!("pass_blockify()");
 		let mut count = 0;
 		let mut state = State::null(self.cpu, self.memory);
-		let mut block = Block::new_rc( CodePtr(0,0) );
+		let mut block: Option<block::BlockRef> = None;
 		
 		// 1. Iterate all instructions
 		for instr in self.instructions.iter_mut()
@@ -120,9 +120,37 @@ impl<'a> Disassembled<'a>
 			if instr.block().is_some()
 			{
 				// Skip, already assigned to a block
+				if let Some(b) = block
+				{
+					debug!("Already blocked: {}, terminating previous", instr);
+					assert!(instr.is_target());
+					b.borrow_mut().set_state( state.unwrap_data() );
+					state = State::null(self.cpu, self.memory);
+					block = None;
+				}
 			}
 			else
 			{
+				// Instruction is a target, create a new block before running
+				if instr.is_target()
+				{
+					debug!("New block triggered at {:?} (target)", instr.addr());
+					count += 1;
+					
+					if let Some(block) = block {
+						block.borrow_mut().set_state( state.unwrap_data() );
+					}
+					
+					// New block
+					let newblock = Block::new_rc(instr.ip);
+					state = State::null(self.cpu, self.memory);
+					
+					block = Some(newblock);
+				}
+				
+				// Assign current code block to instruction
+				instr.set_block(block.as_ref().expect("Block wasn't created for first instructon").clone());
+				
 				// Run instruction
 				state.run(&**instr);
 				
@@ -140,39 +168,32 @@ impl<'a> Disassembled<'a>
 				
 				// If any of
 				// - The instruction is terminal
-				// - The instruction is a jump target
 				// - or, the todo list contains a non-call entry
 				// Terminate this block and create a new one
-				// NOTE: is_terminal check not needed, all terminals will be
-				//       followed by a target (or be at the end).
-				if instr.is_target() || was_jump
+				if was_jump
 				{
-					debug!("New block triggered at {:?}", instr.addr());
+					debug!("New block triggered at {:?} (jump)", instr.addr());
 					count += 1;
 					
-					// TODO: Store state at end of the block
-					// - Need to save state values, actual state contains references
-					block.borrow_mut().set_state( state.unwrap_data() );
+					block.as_ref().unwrap().borrow_mut().set_state( state.unwrap_data() );
 					
 					// New block
 					let newblock = Block::new_rc(instr.ip);
 					state = State::null(self.cpu, self.memory);
 					
-					block = newblock;
+					block = Some(newblock);
 				}
 				else
 				{
 					state.clear_todo_list();
 				}
-				
-				// 3. Assign a code block to all instructions
-				instr.set_block(block.clone());
 			}
 		}
 	
-		assert!( ::std::rc::is_unique(&block) || count > 0 );
-		if count > 0 
+		assert!( block.is_none() || count > 0 );
+		if let Some(block) = block
 		{
+			debug!("Saving state for final block");
 			block.borrow_mut().set_state( state.unwrap_data() );
 		}
 		
