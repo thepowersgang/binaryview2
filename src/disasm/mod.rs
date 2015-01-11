@@ -16,7 +16,8 @@ mod block;
 pub mod cpus;
 
 pub type CPUMode = u32;
-pub type CodePtr = (u64, CPUMode);
+#[derive(Copy,PartialEq,PartialOrd,Eq,Ord,Clone,Hash)]
+pub struct CodePtr(CPUMode, u64);
 
 trait CPU
 {
@@ -60,6 +61,7 @@ impl<'a> Disassembled<'a>
 		self.instructions.len()
 	}
 	
+	#[todo="Should this be moved to being Show or String?"]
 	pub fn dump(&self, f: &mut ::std::fmt::Writer) -> ::std::fmt::Result
 	{
 		for instr in self.instructions.iter()
@@ -77,7 +79,7 @@ impl<'a> Disassembled<'a>
 			{
 				try!(write!(f, " "));
 			}
-			try!(write!(f, "{:?}\n", instr));
+			try!(write!(f, "{}\n", instr));
 		}
 		Ok( () )
 	}
@@ -88,9 +90,9 @@ impl<'a> Disassembled<'a>
 		let todo = ::std::mem::replace(&mut self.todo_list, Vec::new());
 		info!("convert_queue(): todo = {:?}", todo);
 		let ret = todo.len();
-		for (addr,mode) in todo.into_iter()
+		for ptr in todo.into_iter()
 		{
-			self.convert_from(addr, mode);
+			self.convert_from(ptr);
 		}
 		ret
 	}
@@ -104,7 +106,7 @@ impl<'a> Disassembled<'a>
 		info!("pass_blockify()");
 		let mut count = 0;
 		let mut state = State::null(self.cpu, self.memory);
-		let mut block = Block::new_rc( (0,0) );
+		let mut block = Block::new_rc( CodePtr(0,0) );
 		
 		// 1. Iterate all instructions
 		for instr in self.instructions.iter_mut()
@@ -145,12 +147,12 @@ impl<'a> Disassembled<'a>
 				//       followed by a target (or be at the end).
 				if instr.is_target() || was_jump
 				{
-					debug!("New block triggered at {}:{:#x}", instr.addr().1, instr.addr().0);
+					debug!("New block triggered at {:?}", instr.addr());
 					count += 1;
 					
 					// TODO: Store state at end of the block
 					// - Need to save state values, actual state contains references
-					//block.set_state( state );
+					block.borrow_mut().set_state( state.unwrap_data() );
 					
 					// New block
 					let newblock = Block::new_rc(instr.ip);
@@ -169,6 +171,10 @@ impl<'a> Disassembled<'a>
 		}
 	
 		assert!( ::std::rc::is_unique(&block) || count > 0 );
+		if count > 0 
+		{
+			block.borrow_mut().set_state( state.unwrap_data() );
+		}
 		
 		count
 	}
@@ -186,8 +192,10 @@ impl<'a> Disassembled<'a>
 	}
 	
 	/// Disassemble starting from a given address
-	pub fn convert_from(&mut self, addr: u64, mode: CPUMode)
+	pub fn convert_from(&mut self, ip: CodePtr)
 	{
+		let mode = ip.mode();
+		let addr = ip.addr();
 		debug!("convert_from(addr={:#x},mode={})", addr, mode);
 		let mut todo = Vec::<CodePtr>::new();
 		
@@ -221,9 +229,10 @@ impl<'a> Disassembled<'a>
 	fn convert_from_inner(&mut self, mut addr: u64, mode: CPUMode, todo: &mut Vec<CodePtr>)
 	{
 		let mut state = State::null(self.cpu, self.memory);
+		let instr_ptr = CodePtr(mode, addr);
 		
 		// Locate the insert location for the first instruction
-		let mut pos = self.instructions.find_ins(|e| e.ip.0.cmp(&addr));
+		let mut pos = self.instructions.find_ins(|e| e.ip.cmp(&instr_ptr));
 		if !pos.is_end() && pos.next().contains(addr)
 		{
 			debug!("- Address {:#x},mode={} already processed", addr, mode);
@@ -253,7 +262,7 @@ impl<'a> Disassembled<'a>
 			
 			// Set common state on instruction
 			// - Straight out of the disassembler, it is just a bare instruction
-			instr.set_addr( (addr, mode) );
+			instr.set_addr( CodePtr(mode, addr) );
 			debug!("> {:?}", instr);
 			
 			// Execute with minimal state
@@ -283,6 +292,32 @@ impl<'a> Disassembled<'a>
 		}
 		
 		debug!("- Complete at IP={:#x}", addr);
+	}
+}
+
+impl CodePtr
+{
+	pub fn new(mode: CPUMode, addr: u64) -> CodePtr
+	{
+		CodePtr(mode, addr)
+	}
+	
+	pub fn mode(&self) -> CPUMode { self.0 }
+	pub fn addr(&self) -> u64 { self.1 }
+}
+
+impl ::std::fmt::String for CodePtr
+{
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
+	{
+		write!(f, "{}:{:#08x}", self.0, self.1)
+	}
+}
+impl ::std::fmt::Show for CodePtr
+{
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
+	{
+		write!(f, "{}:{:#x}", self.0, self.1)
 	}
 }
 

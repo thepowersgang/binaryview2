@@ -65,7 +65,7 @@ fn main()
 		).unwrap();
 	// - Select CPU
 	// TODO: Obtain CPU type from memory map
-	let cpu = disasm::cpus::pick("arm")
+	let cpu = match disasm::cpus::pick("arm")
 		{
 		Some(x) => x,
 		None => panic!("Unknown CPU type"),
@@ -75,9 +75,9 @@ fn main()
 	// ------------------------------------------------------------
 	// > Iterate entrypoints, running conversion (and obtaining further addresses to process)
 	let mut disasm = disasm::Disassembled::new(&memory, cpu);
-	for (addr,mode) in entrypoints.into_iter()
+	for addr in entrypoints.into_iter()
 	{
-		disasm.convert_from(addr, mode);
+		disasm.convert_from(addr);
 	}
 	// > Loop until no change in state happens, or a maximum iteration count is hit
 	let mut pass_count = 0;

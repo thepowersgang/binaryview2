@@ -70,7 +70,7 @@ impl Instruction
 		) -> Instruction
 	{
 		Instruction {
-			ip: (0, 0),
+			ip: CodePtr::new(0, 0),
 			len: len,
 			condition: condition,
 			opsize: opsize,
@@ -98,14 +98,14 @@ impl Instruction
 	pub fn is_call_target(&self) -> bool { self.is_call_target }
 	
 	pub fn contains(&self, addr: u64) -> bool {
-		self.ip.0 <= addr && addr < self.ip.0 + self.len as u64
+		self.ip.addr() <= addr && addr < self.ip.addr() + self.len as u64
 	}
 	pub fn is_terminal(&self) -> bool {
 		self.condition == COND_ALWAYS && self.class.is_terminal(self.params.as_slice())
 	}
 
 	pub fn addr(&self) -> CodePtr { self.ip }
-	pub fn mode(&self) -> super::CPUMode { self.ip.1 }
+	pub fn mode(&self) -> super::CPUMode { self.ip.mode() }
 	pub fn opsize(&self) -> InstrSize { self.opsize }
 	pub fn params(&self) -> &[InstrParam] { self.params.as_slice() }
 	pub fn block(&self) -> Option<::disasm::block::BlockRef> { self.block.clone() }
@@ -115,7 +115,18 @@ impl ::std::fmt::Show for Instruction
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
-		try!( write!(f, "[{}:{:8x}]+{} ", self.ip.1, self.ip.0, self.len) );
+		try!( write!(f, "[{:?}]+{} ", self.ip, self.len) );
+		try!( write!(f, "{{{:?}}}:{:x} {} ", self.opsize, self.condition, self.class.name()) );
+		try!( self.class.print(f, self.params.as_slice()) );
+		Ok( () )
+	}
+}
+
+impl ::std::fmt::String for Instruction
+{
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
+	{
+		try!( write!(f, "[{}+{}] ", self.ip, self.len) );
 		try!( write!(f, "{{{:?}}}:{:x} {} ", self.opsize, self.condition, self.class.name()) );
 		try!( self.class.print(f, self.params.as_slice()) );
 		Ok( () )

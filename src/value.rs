@@ -32,7 +32,7 @@ pub enum Value<T: ValueType>
 	//Nested(Rc<Vec<Value<T>>>),
 }
 
-#[derive(PartialEq,Copy)]
+#[derive(PartialEq,Copy,Clone,Show)]
 pub enum ValueBool
 {
 	True,

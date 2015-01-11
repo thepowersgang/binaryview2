@@ -35,7 +35,7 @@ enum RunMode
 }
 
 /// State data (stored separately to allow saving)
-struct StateData
+pub struct StateData
 {
 	/// Real registers - Static vector
 	registers: Vec<Value<u64>>,
@@ -69,6 +69,13 @@ impl<'mem> State<'mem>
 			todo_list: Vec::new(),	
 		}
 	}
+	
+	pub fn data(&self) -> &StateData {
+		&self.data
+	}
+	pub fn unwrap_data(self) -> StateData {
+		self.data
+	}
 
 	/// Retrive the contents of the todo list
 	pub fn todo_list(&self) -> &[(CodePtr,bool)] {
@@ -81,6 +88,7 @@ impl<'mem> State<'mem>
 	/// Execute a single instruction
 	pub fn run(&mut self, instr: &::disasm::instruction::Instruction)
 	{
+		debug!("--- {}", instr);
 		instr.class.forwards(self, instr);
 	}
 	
@@ -225,7 +233,7 @@ impl<'mem> State<'mem>
 		{
 			for addr in val.possibilities()
 			{
-				self.todo_list.push( ((addr,mode),false) );
+				self.todo_list.push( (CodePtr::new(mode, addr),false) );
 			}
 		}
 	}
@@ -236,7 +244,7 @@ impl<'mem> State<'mem>
 		{
 			for addr in val.possibilities()
 			{
-				self.todo_list.push( ((addr,mode),true) );
+				self.todo_list.push( (CodePtr::new(mode, addr),true) );
 			}
 			warn!("TODO: Call clobbering {:?} mode={}", val, mode);
 			//if let Some(f) = state.functions.find( (mode,val
@@ -271,12 +279,61 @@ impl StateData
 	{
 		StateData {
 			registers: (0 .. cpu.num_regs()).map(|_| Value::unknown()).collect(),
-			tmpregs: [Value::unknown(), Value::unknown(), Value::unknown(), Value::unknown()],
 			stack: Vec::with_capacity(16),
+			.. ::std::default::Default::default()
+		}
+	}
+}
+
+impl ::std::default::Default for StateData
+{
+	fn default() -> StateData
+	{
+		StateData {
+			registers: Vec::new(),
+			tmpregs: [Value::unknown(), Value::unknown(), Value::unknown(), Value::unknown()],
+			stack: Vec::new(),
 			
 			flag_c: ValueBool::Unknown,
 			flag_v: ValueBool::Unknown,
 		}
+	}
+}
+
+impl ::std::clone::Clone for StateData
+{
+	fn clone(&self) -> StateData
+	{
+		StateData {
+			registers: self.registers.clone(),
+			tmpregs: [self.tmpregs[0].clone(), self.tmpregs[1].clone(), self.tmpregs[2].clone(), self.tmpregs[3].clone()],
+			stack: self.stack.clone(),
+			
+			flag_c: self.flag_c.clone(),
+			flag_v: self.flag_v.clone(),
+		}
+	}
+}
+
+impl ::std::fmt::Show for StateData
+{
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
+	{
+		write!(f, "StateData {{\n");
+		for (i,reg) in self.registers.iter().enumerate()
+		{
+			try!( write!(f, "  R{}={:?}", i, reg) );
+		}
+		write!(f, "\n");
+		for (i,reg) in self.tmpregs.iter().enumerate()
+		{
+			try!( write!(f, "  tr#{}={:?}", i, reg) );
+		}
+		try!( write!(f, "\n") );
+		try!( write!(f, "  Stack: {:?}\n", self.stack) );
+		try!( write!(f, "  Flags: C={:?} V={:?}\n", self.flag_c, self.flag_v) );
+		try!( write!(f, "}}") );
+		Ok( () )
 	}
 }
 

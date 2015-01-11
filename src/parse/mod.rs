@@ -1,6 +1,8 @@
 //
 //
 //
+use disasm::CodePtr;
+
 mod lexer;
 
 macro_rules! assert_token{
@@ -13,8 +15,6 @@ pub fn get_tok(lex: &mut lexer::Lexer) -> Result<lexer::Token,String>
 {
 	lex.get_token().map_err(|e|format!("Lex Error: {:?}", e))
 }
-
-type Entrypoint = ::disasm::CodePtr;
 
 /// Parse a memory map file
 ///
@@ -29,7 +29,7 @@ pub fn parse_memorymap(
 	infiles: &mut ::std::collections::HashMap<String,::std::io::File>,
 	path: &str
 	)
-	-> Result<(Vec<Entrypoint>,),String>
+	-> Result<(Vec<CodePtr>,),String>
 {
 	let mut entrypoints = Vec::new();
 	let fp = ::std::io::File::open(&::std::path::Path::new(path)).unwrap();
@@ -76,7 +76,7 @@ pub fn parse_memorymap(
 				let mode = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
 				assert_token!( lexer::TokNewline = try!(get_tok(&mut lex)) );
 				debug!("Add entrypoint {:#x} mode={}", addr, mode);
-				entrypoints.push( (addr, mode as ::disasm::CPUMode) );
+				entrypoints.push( CodePtr::new(mode as ::disasm::CPUMode, addr) );
 				},
 			"METHOD" => {
 				let addr = assert_token!( lexer::TokInteger(i) = try!(get_tok(&mut lex)) );
