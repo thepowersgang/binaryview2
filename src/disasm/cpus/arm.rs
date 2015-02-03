@@ -3,11 +3,12 @@
 //
 // disam/cpus/arm.rs
 // - Recent ARM CPU disassembly (written against ARMv5)
-use value::{Value,ValueBool};
+use value::Value;
 use disasm::common_instrs;
 use disasm::instruction::COND_ALWAYS;
 use disasm::instruction::{Instruction,InstructionClass};
 use disasm::instruction::{InstrParam,InstrSize};
+//use disasm::state::State;
 
 trait BitExtractor {
 	fn bits(&self, base: usize, count: usize) -> Self;
@@ -20,11 +21,10 @@ impl BitExtractor for u16 {
 
 struct ArmCpu;
 
-#[repr(C)]
-enum SReg
+mod SReg
 {
-	CPSR = 0,
-	SPSR = 1,
+	pub const CPSR: u8 = 0;
+	//pub const SPSR: u8 = 1;
 }
 
 pub static CPU_STRUCT: ArmCpu = ArmCpu;
@@ -607,7 +607,6 @@ fn reg_t(word: u16, ofs: usize) -> InstrParam
 mod instrs
 {
 	use value::{Value,ValueBool};
-	use disasm::state::State;
 	use disasm::instruction::InstrParam;
 
 	// Set system register

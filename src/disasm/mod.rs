@@ -61,7 +61,7 @@ impl<'a> Disassembled<'a>
 		self.instructions.len()
 	}
 	
-	#[todo="Should this be moved to being Show or String?"]
+	// TODO: Should this be moved to being Debug or Display?
 	pub fn dump(&self, f: &mut ::std::fmt::Writer) -> ::std::fmt::Result
 	{
 		for instr in self.instructions.iter()
@@ -327,14 +327,14 @@ impl CodePtr
 	pub fn addr(&self) -> u64 { self.1 }
 }
 
-impl ::std::fmt::String for CodePtr
+impl ::std::fmt::Display for CodePtr
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
 		write!(f, "{}:{:#08x}", self.0, self.1)
 	}
 }
-impl ::std::fmt::Show for CodePtr
+impl ::std::fmt::Debug for CodePtr
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{

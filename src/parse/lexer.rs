@@ -7,11 +7,9 @@
 // TODO: Make this even more generic, using a syntax extension to provide format description
 extern crate libc;
 
-use std::io::IoResult;
-
 pub use self::Token::*;
 
-#[derive(Show)]
+#[derive(Debug)]
 pub enum Token
 {
 	TokEof,
@@ -83,7 +81,7 @@ impl<'a> Lexer<'a>
 			Ok(x) => Ok( x ),
 			Err(e) => match e.kind
 				{
-				::std::io::EndOfFile => Ok( '\0' ),
+				::std::old_io::EndOfFile => Ok( '\0' ),
 				_ => Err( () )
 				},
 			},

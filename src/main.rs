@@ -2,6 +2,8 @@
 //
 //
 #![feature(box_syntax)]
+#![feature(core,std_misc,os,io,path,collections,unicode,hash)]
+#![feature(libc)]	// Used by lexer, probably shouldn't
 
 #[macro_use] extern crate log;
 extern crate getopts;
@@ -21,11 +23,10 @@ fn main()
 {
 	let str_args = ::std::os::args();
 	// - Parse arguments
-	let opts = [
-		getopts::optopt("m", "memmap", "Set memory map filename", "FILE"),
-		getopts::optopt("t", "types", "Set type list filename", "FILE"),
-		];
-	let args = match getopts::getopts(&str_args[(1..)], &opts)
+	let mut opts = getopts::Options::new();
+	opts.optopt("m", "memmap", "Set memory map filename", "FILE");
+	opts.optopt("t", "types", "Set type list filename", "FILE");
+	let args = match opts.parse(str_args.tail())
 		{
 		Ok(v) => v,
 		Err(reason) => panic!("getopts() failed: {}", reason),
@@ -33,14 +34,14 @@ fn main()
 	let typesfile = args.opt_str("types").unwrap_or( String::from_str("types.txt") );
 	let mapfile = args.opt_str("memmap").unwrap_or( String::from_str("memorymap.txt") );
 	// - Open input files
-	let mut infiles: std::collections::HashMap<String,::std::io::File> = args.free.iter().map(|p| {
+	let mut infiles: std::collections::HashMap<String,::std::old_io::File> = args.free.iter().map(|p| {
 		let mut s = p.split('=');
 		let ident = s.next().unwrap();
 		let path = s.next().expect("ERROR: Free arguments should be of the form '<name>=<path>'");
 		if let Some(_) = s.next() {
 			panic!("ERROR: Free arguments should be of the form '<name>=<path>'");
 		}
-		let file = match ::std::io::File::open(&::std::path::Path::new(path)) {
+		let file = match ::std::old_io::File::open(&::std::path::Path::new(path)) {
 			Ok(x) => x,
 			Err(e) => panic!("ERROR: Unable to open file '{}' for reading. Reason: {}", path, e)
 			};
@@ -92,6 +93,7 @@ fn main()
 		cont |= disasm.pass_blockify() > 0;
 		// - Acquire clobber lists for methods
 		//  > Scan methods from leaf methods first (loops handled somehow?)
+		cont |= disasm.pass_callingconv() > 0;
 		// - Determine value ranges
 		// - Rescan for new addresses to process
 		if !cont {
@@ -102,8 +104,9 @@ fn main()
 	debug!("TOTALS:");
 	debug!(" Pass Count = {}", pass_count);
 	debug!(" Instruction Count = {}", disasm.instr_count());
-	let mut stdout = WriterWrapper(::std::io::stdout());
-	disasm.dump( &mut stdout );
+	let mut stdout = WriterWrapper(::std::old_io::stdout());
+	
+	let _ = disasm.dump( &mut stdout );
 }
 
 struct WriterWrapper<T:Writer>(T);

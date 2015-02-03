@@ -32,7 +32,7 @@ pub enum Value<T: ValueType>
 	//Nested(Rc<Vec<Value<T>>>),
 }
 
-#[derive(PartialEq,Copy,Clone,Show)]
+#[derive(PartialEq,Copy,Clone,Debug)]
 pub enum ValueBool
 {
 	True,
@@ -418,7 +418,7 @@ impl<T: ValueType> ::std::cmp::PartialOrd for Value<T>
 }
 // */
 
-impl<T: ValueType> ::std::fmt::Show for Value<T>
+impl<T: ValueType> ::std::fmt::Debug for Value<T>
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{

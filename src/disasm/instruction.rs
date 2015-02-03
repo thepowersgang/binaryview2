@@ -111,7 +111,7 @@ impl Instruction
 	pub fn block(&self) -> Option<::disasm::block::BlockRef> { self.block.clone() }
 }
 
-impl ::std::fmt::Show for Instruction
+impl ::std::fmt::Debug for Instruction
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
@@ -122,7 +122,7 @@ impl ::std::fmt::Show for Instruction
 	}
 }
 
-impl ::std::fmt::String for Instruction
+impl ::std::fmt::Display for Instruction
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
@@ -145,7 +145,7 @@ impl InstrParam
 		}
 	}
 }
-impl ::std::fmt::Show for InstrParam
+impl ::std::fmt::Debug for InstrParam
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
@@ -159,7 +159,7 @@ impl ::std::fmt::Show for InstrParam
 }
 
 // --------------------------------------------------------------------
-impl ::std::fmt::Show for InstrSize
+impl ::std::fmt::Debug for InstrSize
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
@@ -174,16 +174,12 @@ impl ::std::fmt::Show for InstrSize
 	}
 }
 
-def_instr!{INVALID, IClassInvalid, (f,i,p,s) => {
+def_instr!{INVALID, IClassInvalid, (f,i,_p,_s) => {
 	{ true };
 	{ write!(f, "--") };
 	{
-		let _ = p;
-		let _ = s;
 	};
 	{
-		let _ = p;
-		let _ = s;
 	};
 }}
 

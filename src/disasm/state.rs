@@ -70,9 +70,9 @@ impl<'mem> State<'mem>
 		}
 	}
 	
-	pub fn data(&self) -> &StateData {
-		&self.data
-	}
+	//pub fn data(&self) -> &StateData {
+	//	&self.data
+	//}
 	pub fn unwrap_data(self) -> StateData {
 		self.data
 	}
@@ -315,16 +315,16 @@ impl ::std::clone::Clone for StateData
 	}
 }
 
-impl ::std::fmt::Show for StateData
+impl ::std::fmt::Debug for StateData
 {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
-		write!(f, "StateData {{\n");
+		try!( write!(f, "StateData {{\n") );
 		for (i,reg) in self.registers.iter().enumerate()
 		{
 			try!( write!(f, "  R{}={:?}", i, reg) );
 		}
-		write!(f, "\n");
+		try!( write!(f, "\n") );
 		for (i,reg) in self.tmpregs.iter().enumerate()
 		{
 			try!( write!(f, "  tr#{}={:?}", i, reg) );

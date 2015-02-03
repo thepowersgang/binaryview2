@@ -9,22 +9,23 @@ pub struct TypeMap
 	structs: HashMap<String,Struct>
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 pub enum InnerType
 {
 	Int(u8),
-	Struct(String),
-	String(String),
+	Struct(String),	// structure name
+	// TODO: Character sets (needed for dumping Pokemon)
+	//String(String),	// character set name
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 pub enum Type
 {
 	Lit(InnerType),
 	Pointer(u8,InnerType),
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 struct Struct
 {
 	fields: Vec< (String,Type) >,

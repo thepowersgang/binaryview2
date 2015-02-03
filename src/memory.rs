@@ -41,11 +41,17 @@ impl Region
 		RegionType::MMIO(_) => Value::unknown(),
 		}
 	}
-	pub fn read_u16(&self, ofs: usize) -> Value<u16> {
+	pub fn read_u16_le(&self, ofs: usize) -> Value<u16> {
 		Value::concat(self.read_u8(ofs+0), self.read_u8(ofs+1))
 	}
-	pub fn read_u32(&self, ofs: usize) -> Value<u32> {
-		Value::concat(self.read_u16(ofs+0), self.read_u16(ofs+2))
+	pub fn read_u32_le(&self, ofs: usize) -> Value<u32> {
+		Value::concat(self.read_u16_le(ofs+0), self.read_u16_le(ofs+2))
+	}
+	pub fn read_u16_be(&self, ofs: usize) -> Value<u16> {
+		Value::concat(self.read_u8(ofs+1), self.read_u8(ofs+0))
+	}
+	pub fn read_u32_be(&self, ofs: usize) -> Value<u32> {
+		Value::concat(self.read_u16_be(ofs+2), self.read_u16_be(ofs+0))
 	}
 	
 	/// Compare, treating inside as equal
@@ -95,10 +101,10 @@ impl MemoryState
 	}
 	
 	/// Load fixed memory from a file
-	pub fn add_rom(&mut self, base: u64, size: usize, file: &mut ::std::io::File)
+	pub fn add_rom(&mut self, base: u64, size: usize, file: &mut ::std::old_io::File)
 	{
 		// The ROM repeats as many times as nessesary to reach the stated size
-		file.seek(0, ::std::io::SeekEnd).unwrap();
+		file.seek(0, ::std::old_io::SeekEnd).unwrap();
 		let filesize = file.tell().unwrap();
 		
 		// 1. 'filesize' must be a divisor of 'size'
@@ -108,7 +114,7 @@ impl MemoryState
 		
 		// 2. Load data!
 		// - Wrapping is handled in Region::read()
-		file.seek(0, ::std::io::SeekSet).unwrap();
+		file.seek(0, ::std::old_io::SeekSet).unwrap();
 		self.add_region(base, size, RegionType::ROM(file.read_to_end().unwrap()));
 		debug!("Add ROM {:#x}+{:#x}", base, size);
 	}
@@ -147,17 +153,21 @@ impl MemoryState
 	}
 	/// Read two bytes (from the same region)
 	pub fn read_u16(&self, addr: u64) -> Option<Value<u16>> {
-		self.get_region(addr).map( |(a,ofs)| a.read_u16(ofs) )
+		self.get_region(addr).map( |(a,ofs)| if self.endian_big { a.read_u16_be(ofs) } else { a.read_u16_le(ofs) } )
 	}
 	/// Read four bytes (from the same region)
 	pub fn read_u32(&self, addr: u64) -> Option<Value<u32>> {
-		self.get_region(addr).map( |(a,ofs)| a.read_u32(ofs) )
+		self.get_region(addr).map( |(a,ofs)| if self.endian_big { a.read_u32_be(ofs) } else { a.read_u32_le(ofs) } )
 	}
 	/// Read eight bytes (from the same region)
 	pub fn read_u64(&self, addr: u64) -> Option<Value<u64>> {
 		self.get_region(addr).map(
 			|(a,ofs)|
-				Value::concat( a.read_u32(ofs+0), a.read_u32(ofs+4) )
+				if self.endian_big {
+					Value::concat( a.read_u32_be(ofs+4), a.read_u32_be(ofs+0) )
+				} else {
+					Value::concat( a.read_u32_le(ofs+0), a.read_u32_le(ofs+4) )
+				}
 			)
 	}
 	

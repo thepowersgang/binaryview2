@@ -6,7 +6,6 @@
 use disasm::instruction::{InstructionClass,InstrSize,InstrParam};
 use disasm::microcode;
 use disasm::microcode::UCodeOp;
-use disasm::state::State;
 use disasm::state::StatusFlags;
 use value::{Value,ValueBool,ValueType};
 
