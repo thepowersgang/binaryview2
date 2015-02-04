@@ -24,12 +24,14 @@ pub struct State<'mem>
 	data: StateData,
 }
 
-enum RunMode
+pub enum RunMode
 {
 	/// Minimal state propagation
 	Parse,
 	/// Stack enabled
 	Blockify,
+	/// Stack and parital memory?
+	CallingConv,
 	/// Full memory and stack works
 	Full,
 }
@@ -60,15 +62,23 @@ pub enum StatusFlags
 impl<'mem> State<'mem>
 {
 	/// Create a new empty state
-	pub fn null<'a>(cpu: &'a ::disasm::CPU, mem: &'a ::memory::MemoryState) -> State<'a>
+	pub fn null<'a>(mode: RunMode, cpu: &'a ::disasm::CPU, mem: &'a ::memory::MemoryState) -> State<'a>
 	{
 		State {
-			mode: RunMode::Parse,	// TODO: Receive as an argument
+			mode: mode,	// TODO: Receive as an argument
 			memory: mem,
 			data: StateData::new(cpu),
 			todo_list: Vec::new(),	
 		}
 	}
+	
+	//pub fn fill_canary(&mut self)
+	//{
+	//	for reg in self.data.registers.iter_mut()
+	//	{
+	//		*reg = Value::canary();
+	//	}
+	//}
 	
 	//pub fn data(&self) -> &StateData {
 	//	&self.data
@@ -333,6 +343,24 @@ impl ::std::fmt::Debug for StateData
 		try!( write!(f, "  Stack: {:?}\n", self.stack) );
 		try!( write!(f, "  Flags: C={:?} V={:?}\n", self.flag_c, self.flag_v) );
 		try!( write!(f, "}}") );
+		Ok( () )
+	}
+}
+
+impl ::std::fmt::Display for StateData
+{
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
+	{
+		for (i,reg) in self.registers.iter().enumerate()
+		{
+			try!( write!(f, "  R{:2}={:?}", i, reg) );
+			if (i + 1) % 8 == 0 {
+				try!( write!(f, "\n") );
+			}
+		}
+		if self.registers.len() % 8 != 0 {
+			try!( write!(f, "\n") );
+		}
 		Ok( () )
 	}
 }

@@ -6,6 +6,7 @@
 #![feature(libc)]	// Used by lexer, probably shouldn't
 
 #[macro_use] extern crate log;
+extern crate env_logger;
 extern crate getopts;
 
 mod sortedlist;	// Trait - Provides a sorted list interface to generic types
@@ -21,6 +22,7 @@ static MAX_LOOPS: usize = 32;	// Maximum number of passes during disassembly+pro
 
 fn main()
 {
+	env_logger::init().unwrap();
 	let str_args = ::std::os::args();
 	// - Parse arguments
 	let mut opts = getopts::Options::new();

@@ -3,7 +3,7 @@
 //
 // disasm/mod.rs
 // - Disassembly core
-use self::state::State;
+use self::state::{State,RunMode};
 use self::block::Block;
 use sortedlist::SortedList;	// Allows treating of collection types as sorted lists
 use std::collections::HashSet;
@@ -80,6 +80,13 @@ impl<'a> Disassembled<'a>
 				try!(write!(f, " "));
 			}
 			try!(write!(f, "{}\n", instr));
+			if let Some(b) = instr.block()
+			{
+				if b.borrow().last_instr() == instr.addr()
+				{
+					try!(write!(f, "{}\n", b.borrow().end_state()));
+				}
+			}
 		}
 		Ok( () )
 	}
@@ -105,7 +112,7 @@ impl<'a> Disassembled<'a>
 	{
 		info!("pass_blockify()");
 		let mut count = 0;
-		let mut state = State::null(self.cpu, self.memory);
+		let mut state = State::null(RunMode::Blockify, self.cpu, self.memory);
 		let mut block: Option<block::BlockRef> = None;
 		
 		// 1. Iterate all instructions
@@ -125,7 +132,7 @@ impl<'a> Disassembled<'a>
 					debug!("Already blocked: {}, terminating previous", instr);
 					assert!(instr.is_target());
 					b.borrow_mut().set_state( state.unwrap_data() );
-					state = State::null(self.cpu, self.memory);
+					state = State::null(RunMode::Blockify, self.cpu, self.memory);
 					block = None;
 				}
 			}
@@ -143,7 +150,7 @@ impl<'a> Disassembled<'a>
 					
 					// New block
 					let newblock = Block::new_rc(instr.ip);
-					state = State::null(self.cpu, self.memory);
+					state = State::null(RunMode::Blockify, self.cpu, self.memory);
 					
 					block = Some(newblock);
 				}
@@ -175,11 +182,15 @@ impl<'a> Disassembled<'a>
 					debug!("New block triggered at {:?} (jump)", instr.addr());
 					count += 1;
 					
-					block.as_ref().unwrap().borrow_mut().set_state( state.unwrap_data() );
+					{
+						let mut br: ::std::cell::RefMut<_> = block.as_ref().unwrap().borrow_mut();
+						br.set_last_instr( instr.addr() );
+						br.set_state( state.unwrap_data() );
+					}
 					
 					// New block
 					let newblock = Block::new_rc(instr.ip);
-					state = State::null(self.cpu, self.memory);
+					state = State::null(RunMode::Blockify, self.cpu, self.memory);
 					
 					block = Some(newblock);
 				}
@@ -187,6 +198,11 @@ impl<'a> Disassembled<'a>
 				{
 					state.clear_todo_list();
 				}
+			}
+			
+			if let Some(ref block) = block
+			{
+				block.borrow_mut().set_last_instr( instr.addr() );
 			}
 		}
 	
@@ -204,11 +220,18 @@ impl<'a> Disassembled<'a>
 	pub fn pass_callingconv(&mut self) -> usize
 	{
 		// For all methods
-		
-		// - Create a state with all registers primed with Canary values
-		// - Execute (branching state at conditional/multitarget jumps)
-		// - When end of method is hit, save state.
-		// - Spot reverse jumps and (TODO) [Run until stable] [Stop]
+		for instr in self.instructions.iter_mut()
+		{
+			if ! instr.is_call_target() {
+				continue ;
+			}
+			
+			// - Create a state with all registers primed with Canary values
+			let state = State::null(RunMode::CallingConv, self.cpu, self.memory);
+			// - Execute (branching state at conditional/multitarget jumps)
+			// - When end of method is hit, save state.
+			// - Spot reverse jumps and (TODO) [Run until stable] [Stop]
+		}
 		0
 	}
 	
@@ -249,7 +272,7 @@ impl<'a> Disassembled<'a>
 	/// Holds a mutable handle to self.instructions, so can't be part of convert_from
 	fn convert_from_inner(&mut self, mut addr: u64, mode: CPUMode, todo: &mut Vec<CodePtr>)
 	{
-		let mut state = State::null(self.cpu, self.memory);
+		let mut state = State::null(RunMode::Parse, self.cpu, self.memory);
 		let instr_ptr = CodePtr(mode, addr);
 		
 		// Locate the insert location for the first instruction
