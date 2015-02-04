@@ -12,3 +12,30 @@ Microcode:
  > RunForwards (input is previous state, output is next state)
  > RunBackwards (input is next state, output is previous state)
 
+
+
+
+Representation:
+- Vec<Instruction>?
+
+Functions -> Block Tree -> Instructions
+
+
+struct Program
+{
+	blocks: Vec<Block<Block>>,	// sorted by address of first block?
+	functions: Vec<CodePtr>,	// First instruction
+}
+struct Function
+{
+	start: CodePtr,
+	inputs: BitSet,
+	clobbers: BitSet,
+	outputs: BitSet,
+	
+}
+struct Block
+{
+	instrs: Vec<Instruction>,
+}
+

@@ -37,9 +37,9 @@ pub struct Disassembled<'a>
 {
 	memory: &'a ::memory::MemoryState,
 	cpu: &'a (CPU+'a),
-	instructions: Vec<Box<instruction::Instruction>>,
+	blocks: Vec<Box<Block>>,
 	
-	todo_list: Vec<CodePtr>,
+	todo_list: HashSet<CodePtr>,
 	// TODO: Store is_call flag
 	method_list: HashSet<CodePtr>,
 }
@@ -51,42 +51,36 @@ impl<'a> Disassembled<'a>
 		Disassembled {
 			memory: mem,
 			cpu: cpu,
-			instructions: Vec::new(),
-			todo_list: Vec::new(),
+			blocks: Vec::new(),
+			todo_list: HashSet::new(),
 			method_list: HashSet::new(),
 		}
 	}
 	/// Count total instructions converted
 	pub fn instr_count(&self) -> usize {
-		self.instructions.len()
+		self.blocks.iter().fold(0, |v,x| v + x.instrs().len())
 	}
 	
 	// TODO: Should this be moved to being Debug or Display?
 	pub fn dump(&self, f: &mut ::std::fmt::Writer) -> ::std::fmt::Result
 	{
-		for instr in self.instructions.iter()
+		for block in self.blocks.iter()
 		{
-			if instr.is_call_target()
+			if block.instrs()[0].is_call_target()
 			{
 				try!(write!(f, "\n"));
+				// TODO: Print method information (clobbers, outputs, etc)
 				try!(write!(f, "@"));
-			}
-			else if instr.is_target()
-			{
-				try!(write!(f, ">"));
 			}
 			else
 			{
-				try!(write!(f, " "));
+				try!(write!(f, ">"));
 			}
-			try!(write!(f, "{}\n", instr));
-			if let Some(b) = instr.block()
+			for i in block.instrs().iter()
 			{
-				if b.borrow().last_instr() == instr.addr()
-				{
-					try!(write!(f, "{}\n", b.borrow().end_state()));
-				}
+				try!(write!(f, "{}\n ", i));
 			}
+			try!(write!(f, "{}\n", block.end_state()));
 		}
 		Ok( () )
 	}
@@ -94,8 +88,8 @@ impl<'a> Disassembled<'a>
 	/// Run disassembly on the todo list
 	pub fn convert_queue(&mut self) -> usize
 	{
-		let todo = ::std::mem::replace(&mut self.todo_list, Vec::new());
-		info!("convert_queue(): todo = {:?}", todo);
+		info!("convert_queue(): todo = {:?}", self.todo_list);
+		let todo = ::std::mem::replace(&mut self.todo_list, HashSet::new());
 		let ret = todo.len();
 		for ptr in todo.into_iter()
 		{
@@ -110,109 +104,109 @@ impl<'a> Disassembled<'a>
 	/// Also handles marking of instructions as call targets for later passes	
 	pub fn pass_blockify(&mut self) -> usize
 	{
-		info!("pass_blockify()");
+		//info!("pass_blockify()");
 		let mut count = 0;
-		let mut state = State::null(RunMode::Blockify, self.cpu, self.memory);
-		let mut block: Option<block::BlockRef> = None;
-		
-		// 1. Iterate all instructions
-		for instr in self.instructions.iter_mut()
-		{
-			// (side) Mark call targets using global method list
-			if self.method_list.contains( &instr.addr() ) 
-			{
-				instr.set_call_target();
-			}
-			
-			if instr.block().is_some()
-			{
-				// Skip, already assigned to a block
-				if let Some(b) = block
-				{
-					debug!("Already blocked: {}, terminating previous", instr);
-					assert!(instr.is_target());
-					b.borrow_mut().set_state( state.unwrap_data() );
-					state = State::null(RunMode::Blockify, self.cpu, self.memory);
-					block = None;
-				}
-			}
-			else
-			{
-				// Instruction is a target, create a new block before running
-				if instr.is_target()
-				{
-					debug!("New block triggered at {:?} (target)", instr.addr());
-					count += 1;
-					
-					if let Some(block) = block {
-						block.borrow_mut().set_state( state.unwrap_data() );
-					}
-					
-					// New block
-					let newblock = Block::new_rc(instr.ip);
-					state = State::null(RunMode::Blockify, self.cpu, self.memory);
-					
-					block = Some(newblock);
-				}
-				
-				// Assign current code block to instruction
-				instr.set_block(block.as_ref().expect("Block wasn't created for first instructon").clone());
-				
-				// Run instruction
-				state.run(&**instr);
-				
-				// Flag call targets (Secondary job)
-				// - Collate them 
-				let mut was_jump = false;
-				for &(_, iscall) in state.todo_list().iter()
-				{
-					if iscall {
-					}
-					else {
-						was_jump = true;
-					}
-				}
-				
-				// If any of
-				// - The instruction is terminal
-				// - or, the todo list contains a non-call entry
-				// Terminate this block and create a new one
-				if was_jump
-				{
-					debug!("New block triggered at {:?} (jump)", instr.addr());
-					count += 1;
-					
-					{
-						let mut br: ::std::cell::RefMut<_> = block.as_ref().unwrap().borrow_mut();
-						br.set_last_instr( instr.addr() );
-						br.set_state( state.unwrap_data() );
-					}
-					
-					// New block
-					let newblock = Block::new_rc(instr.ip);
-					state = State::null(RunMode::Blockify, self.cpu, self.memory);
-					
-					block = Some(newblock);
-				}
-				else
-				{
-					state.clear_todo_list();
-				}
-			}
-			
-			if let Some(ref block) = block
-			{
-				block.borrow_mut().set_last_instr( instr.addr() );
-			}
-		}
+		//let mut state = State::null(RunMode::Blockify, self.cpu, self.memory);
+		//let mut block: Option<block::BlockRef> = None;
+		//
+		//// 1. Iterate all instructions
+		//for instr in self.instructions.iter_mut()
+		//{
+		//	// (side) Mark call targets using global method list
+		//	if self.method_list.contains( &instr.addr() ) 
+		//	{
+		//		instr.set_call_target();
+		//	}
+		//	
+		//	if instr.block().is_some()
+		//	{
+		//		// Skip, already assigned to a block
+		//		if let Some(b) = block
+		//		{
+		//			debug!("Already blocked: {}, terminating previous", instr);
+		//			assert!(instr.is_target());
+		//			b.borrow_mut().set_state( state.unwrap_data() );
+		//			state = State::null(RunMode::Blockify, self.cpu, self.memory);
+		//			block = None;
+		//		}
+		//	}
+		//	else
+		//	{
+		//		// Instruction is a target, create a new block before running
+		//		if instr.is_target()
+		//		{
+		//			debug!("New block triggered at {:?} (target)", instr.addr());
+		//			count += 1;
+		//			
+		//			if let Some(block) = block {
+		//				block.borrow_mut().set_state( state.unwrap_data() );
+		//			}
+		//			
+		//			// New block
+		//			let newblock = Block::new_rc(instr.ip);
+		//			state = State::null(RunMode::Blockify, self.cpu, self.memory);
+		//			
+		//			block = Some(newblock);
+		//		}
+		//		
+		//		// Assign current code block to instruction
+		//		instr.set_block(block.as_ref().expect("Block wasn't created for first instructon").clone());
+		//		
+		//		// Run instruction
+		//		state.run(&**instr);
+		//		
+		//		// Flag call targets (Secondary job)
+		//		// - Collate them 
+		//		let mut was_jump = false;
+		//		for &(_, iscall) in state.todo_list().iter()
+		//		{
+		//			if iscall {
+		//			}
+		//			else {
+		//				was_jump = true;
+		//			}
+		//		}
+		//		
+		//		// If any of
+		//		// - The instruction is terminal
+		//		// - or, the todo list contains a non-call entry
+		//		// Terminate this block and create a new one
+		//		if was_jump
+		//		{
+		//			debug!("New block triggered at {:?} (jump)", instr.addr());
+		//			count += 1;
+		//			
+		//			{
+		//				let mut br: ::std::cell::RefMut<_> = block.as_ref().unwrap().borrow_mut();
+		//				br.set_last_instr( instr.addr() );
+		//				br.set_state( state.unwrap_data() );
+		//			}
+		//			
+		//			// New block
+		//			let newblock = Block::new_rc(instr.ip);
+		//			state = State::null(RunMode::Blockify, self.cpu, self.memory);
+		//			
+		//			block = Some(newblock);
+		//		}
+		//		else
+		//		{
+		//			state.clear_todo_list();
+		//		}
+		//	}
+		//	
+		//	if let Some(ref block) = block
+		//	{
+		//		block.borrow_mut().set_last_instr( instr.addr() );
+		//	}
+		//}
 	
-		assert!( block.is_none() || count > 0 );
-		if let Some(block) = block
-		{
-			debug!("Saving state for final block");
-			block.borrow_mut().set_state( state.unwrap_data() );
-		}
-		
+		//assert!( block.is_none() || count > 0 );
+		//if let Some(block) = block
+		//{
+		//	debug!("Saving state for final block");
+		//	block.borrow_mut().set_state( state.unwrap_data() );
+		//}
+		//
 		count
 	}
 	
@@ -220,31 +214,41 @@ impl<'a> Disassembled<'a>
 	pub fn pass_callingconv(&mut self) -> usize
 	{
 		// For all methods
-		for instr in self.instructions.iter_mut()
-		{
-			if ! instr.is_call_target() {
-				continue ;
-			}
-			
-			// - Create a state with all registers primed with Canary values
-			let state = State::null(RunMode::CallingConv, self.cpu, self.memory);
-			// - Execute (branching state at conditional/multitarget jumps)
-			// - When end of method is hit, save state.
-			// - Spot reverse jumps and (TODO) [Run until stable] [Stop]
-		}
+		//for instr in self.instructions.iter_mut()
+		//{
+		//	if ! instr.is_call_target() {
+		//		continue ;
+		//	}
+		//	
+		//	// - Create a state with all registers primed with Canary values
+		//	let state = State::null(RunMode::CallingConv, self.cpu, self.memory);
+		//	// - Execute (branching state at conditional/multitarget jumps)
+		//	// - When end of method is hit, save state.
+		//	// - Spot reverse jumps and (TODO) [Run until stable] [Stop]
+		//}
 		0
 	}
 	
 	/// Disassemble starting from a given address
 	pub fn convert_from(&mut self, ip: CodePtr)
 	{
-		let mode = ip.mode();
-		let addr = ip.addr();
-		debug!("convert_from(addr={:#x},mode={})", addr, mode);
-		let mut todo = Vec::<CodePtr>::new();
+		debug!("convert_from(ip={})", ip);
+		let mut todo = HashSet::<CodePtr>::new();
+		
+		if let Ok(i) = self.blocks.binary_search_by(|e| e.partial_cmp(&ip).unwrap())
+		{
+			debug!("- Already converted, stored in block '{}--{}'", self.blocks[i].first_addr(), self.blocks[i].last_addr());
+			return ;
+		}
 		
 		// Actual disassembly call
-		self.convert_from_inner(addr, mode, &mut todo);
+		let block = box self.convert_block(ip, &mut todo);
+		let i = match self.blocks.binary_search_by(|e| e.partial_cmp(&block.first_addr()).unwrap())
+			{
+			Err(i) => i,
+			Ok(_) => panic!("Block at address {} already converted", block.first_addr())
+			};
+		self.blocks.insert(i, block);
 		
 		// Disassembly pass (holds a mutable handle to the instruction list
 		// Convert local todo list into the 'global' list (pruning duplicate
@@ -252,16 +256,30 @@ impl<'a> Disassembled<'a>
 		debug!("- TODO = {:?}", todo);
 		for item in todo.into_iter()
 		{
-			match self.instructions.binary_search_by(|e| e.ip.cmp(&item))
+			// Find a block that contains this instruction
+			// - If found, split the block and tag the first instruction
+			// - Otherwise, add to the global to-do list
+			match self.blocks.binary_search_by(|e| e.partial_cmp(&item).unwrap())
 			{
-			Err(_) => {
-				let mut p = self.todo_list.find_ins(|e| e.cmp(&item));
-				if p.is_end() || *p.next() != item { 
-					p.insert( item );
+			Err(i) => {
+				if i > 0 {
+					trace!("i = {}, block = {:?}", i, self.blocks[i-1].first_addr());
+					assert!( self.blocks[i-1].first_addr() < item);
+					assert!( self.blocks[i-1].last_addr() < item);
 				}
+				self.todo_list.insert( item );
 				},
 			Ok(i) => {
-				self.instructions[i].set_target();
+				if self.blocks[i].first_addr() == item {
+					// Equal, ignore
+					trace!("{} is block {}, ignoring", item, i);
+				}
+				else {
+					assert!( self.blocks[i].first_addr() < item );
+					assert!( self.blocks[i].last_addr() >= item );
+					let newblock = box self.blocks[i].split_at(item);
+					self.blocks.insert(i+1, newblock);
+				}
 				},
 			}
 		}
@@ -270,25 +288,24 @@ impl<'a> Disassembled<'a>
 	/// (internal) Does the actual disassembly
 	///
 	/// Holds a mutable handle to self.instructions, so can't be part of convert_from
-	fn convert_from_inner(&mut self, mut addr: u64, mode: CPUMode, todo: &mut Vec<CodePtr>)
+	fn convert_block(&mut self, start: CodePtr, todo: &mut HashSet<CodePtr>) -> Block
 	{
 		let mut state = State::null(RunMode::Parse, self.cpu, self.memory);
-		let instr_ptr = CodePtr(mode, addr);
+		let mut instructions = Vec::new(); 
 		
-		// Locate the insert location for the first instruction
-		let mut pos = self.instructions.find_ins(|e| e.ip.cmp(&instr_ptr));
-		if !pos.is_end() && pos.next().contains(addr)
-		{
-			debug!("- Address {:#x},mode={} already processed", addr, mode);
-			return ;
-		}
-
-		let mut is_first_in_run = true;
+		let mut addr = start.addr();
+		let mode = start.mode();
 		
 		// Keep processing until either a terminal instruction is located (break)
 		// or an already-processed instruction is hit (while cond)
-		while pos.is_end() || !pos.next().contains(addr)
+		loop
 		{
+			if instructions.len() > 0 && self.todo_list.contains( &CodePtr::new(mode, addr) )
+			{
+				trace!("- Hit target");
+				break;
+			}
+			
 			let mut instr = match self.cpu.disassemble(self.memory, addr, mode)
 				{
 				Ok(i) => i,
@@ -298,11 +315,6 @@ impl<'a> Disassembled<'a>
 					instruction::Instruction::invalid()
 					},
 				};
-			
-			if is_first_in_run {
-				instr.set_target();
-				is_first_in_run = false;
-			}
 			
 			// Set common state on instruction
 			// - Straight out of the disassembler, it is just a bare instruction
@@ -314,28 +326,34 @@ impl<'a> Disassembled<'a>
 			state.run(&instr);
 			
 			let is_terminal = instr.is_terminal();
+			let is_cnd = instr.is_conditional();
 			addr += instr.len as u64;
-			pos.insert(box instr);
+			instructions.push(instr);
 			
 			// If instruction is terminal, break out of loop
 			if is_terminal {
 				break;
 			}
+			if is_cnd {
+				todo.insert( CodePtr::new(mode, addr) );
+				break;
+			}
 		}
+		
+		instructions[0].set_target();
+
 		
 		// Get list of jump targets from instruction
 		for &(addr,iscall) in state.todo_list().iter()
 		{
-			let mut p = todo.find_ins(|e| e.cmp(&addr));
-			if p.is_end() || *p.next() != addr {
-				p.insert(addr.clone());
-			}
+			todo.insert( addr.clone() );
 			if iscall {
 				self.method_list.insert( addr.clone() );
 			}
 		}
 		
 		debug!("- Complete at IP={:#x}", addr);
+		Block::new(instructions)
 	}
 }
 

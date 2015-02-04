@@ -103,6 +103,9 @@ impl Instruction
 	pub fn is_terminal(&self) -> bool {
 		self.condition == COND_ALWAYS && self.class.is_terminal(self.params.as_slice())
 	}
+	pub fn is_conditional(&self) -> bool {
+		self.condition != COND_ALWAYS
+	}
 
 	pub fn addr(&self) -> CodePtr { self.ip }
 	pub fn mode(&self) -> super::CPUMode { self.ip.mode() }
