@@ -92,7 +92,7 @@ fn main()
 		// - Convert the current queue of "to-process" addresses (jump and call targets)
 		cont |= disasm.convert_queue() > 0;
 		// - Determine code blocks (and methods)
-		cont |= disasm.pass_blockify() > 0;
+		cont |= disasm.pass_block_run() > 0;
 		// - Acquire clobber lists for methods
 		//  > Scan methods from leaf methods first (loops handled somehow?)
 		cont |= disasm.pass_callingconv() > 0;

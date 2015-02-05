@@ -353,13 +353,9 @@ impl ::std::fmt::Display for StateData
 	{
 		for (i,reg) in self.registers.iter().enumerate()
 		{
-			try!( write!(f, "  R{:2}={:?}", i, reg) );
-			if (i + 1) % 8 == 0 {
-				try!( write!(f, "\n") );
+			if ! reg.is_unknown() {
+				try!( write!(f, "  R{:2}={:?}", i, reg) );
 			}
-		}
-		if self.registers.len() % 8 != 0 {
-			try!( write!(f, "\n") );
 		}
 		Ok( () )
 	}

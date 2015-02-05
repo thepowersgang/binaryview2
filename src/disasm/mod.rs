@@ -66,8 +66,9 @@ impl<'a> Disassembled<'a>
 	{
 		for block in self.blocks.iter()
 		{
-			if block.instrs()[0].is_call_target()
+			if self.method_list.contains( &block.first_addr() )
 			{
+				try!(write!(f, "\n"));
 				try!(write!(f, "\n"));
 				// TODO: Print method information (clobbers, outputs, etc)
 				try!(write!(f, "@"));
@@ -80,7 +81,10 @@ impl<'a> Disassembled<'a>
 			{
 				try!(write!(f, "{}\n ", i));
 			}
-			try!(write!(f, "{}\n", block.end_state()));
+			if let Some(end_state_data) = block.end_state()
+			{
+				try!(write!(f, "{}\n", end_state_data));
+			}
 		}
 		Ok( () )
 	}
@@ -102,111 +106,38 @@ impl<'a> Disassembled<'a>
 	///
 	/// Breaks the code into blocks, separated by jump instructions and jump targets
 	/// Also handles marking of instructions as call targets for later passes	
-	pub fn pass_blockify(&mut self) -> usize
+	pub fn pass_block_run(&mut self) -> usize
 	{
 		//info!("pass_blockify()");
 		let mut count = 0;
-		//let mut state = State::null(RunMode::Blockify, self.cpu, self.memory);
-		//let mut block: Option<block::BlockRef> = None;
-		//
-		//// 1. Iterate all instructions
-		//for instr in self.instructions.iter_mut()
-		//{
-		//	// (side) Mark call targets using global method list
-		//	if self.method_list.contains( &instr.addr() ) 
-		//	{
-		//		instr.set_call_target();
-		//	}
-		//	
-		//	if instr.block().is_some()
-		//	{
-		//		// Skip, already assigned to a block
-		//		if let Some(b) = block
-		//		{
-		//			debug!("Already blocked: {}, terminating previous", instr);
-		//			assert!(instr.is_target());
-		//			b.borrow_mut().set_state( state.unwrap_data() );
-		//			state = State::null(RunMode::Blockify, self.cpu, self.memory);
-		//			block = None;
-		//		}
-		//	}
-		//	else
-		//	{
-		//		// Instruction is a target, create a new block before running
-		//		if instr.is_target()
-		//		{
-		//			debug!("New block triggered at {:?} (target)", instr.addr());
-		//			count += 1;
-		//			
-		//			if let Some(block) = block {
-		//				block.borrow_mut().set_state( state.unwrap_data() );
-		//			}
-		//			
-		//			// New block
-		//			let newblock = Block::new_rc(instr.ip);
-		//			state = State::null(RunMode::Blockify, self.cpu, self.memory);
-		//			
-		//			block = Some(newblock);
-		//		}
-		//		
-		//		// Assign current code block to instruction
-		//		instr.set_block(block.as_ref().expect("Block wasn't created for first instructon").clone());
-		//		
-		//		// Run instruction
-		//		state.run(&**instr);
-		//		
-		//		// Flag call targets (Secondary job)
-		//		// - Collate them 
-		//		let mut was_jump = false;
-		//		for &(_, iscall) in state.todo_list().iter()
-		//		{
-		//			if iscall {
-		//			}
-		//			else {
-		//				was_jump = true;
-		//			}
-		//		}
-		//		
-		//		// If any of
-		//		// - The instruction is terminal
-		//		// - or, the todo list contains a non-call entry
-		//		// Terminate this block and create a new one
-		//		if was_jump
-		//		{
-		//			debug!("New block triggered at {:?} (jump)", instr.addr());
-		//			count += 1;
-		//			
-		//			{
-		//				let mut br: ::std::cell::RefMut<_> = block.as_ref().unwrap().borrow_mut();
-		//				br.set_last_instr( instr.addr() );
-		//				br.set_state( state.unwrap_data() );
-		//			}
-		//			
-		//			// New block
-		//			let newblock = Block::new_rc(instr.ip);
-		//			state = State::null(RunMode::Blockify, self.cpu, self.memory);
-		//			
-		//			block = Some(newblock);
-		//		}
-		//		else
-		//		{
-		//			state.clear_todo_list();
-		//		}
-		//	}
-		//	
-		//	if let Some(ref block) = block
-		//	{
-		//		block.borrow_mut().set_last_instr( instr.addr() );
-		//	}
-		//}
-	
-		//assert!( block.is_none() || count > 0 );
-		//if let Some(block) = block
-		//{
-		//	debug!("Saving state for final block");
-		//	block.borrow_mut().set_state( state.unwrap_data() );
-		//}
-		//
+		for block in self.blocks.iter_mut()
+		{
+			// Execute block
+			if block.end_state().is_some()
+			{
+				continue ;
+			}
+			
+			let mut state = State::null(RunMode::Blockify, self.cpu, self.memory);
+			for instr in block.instrs().iter()
+			{
+				state.run(&*instr);
+				
+				// Sanity check that jumps are the last instruction in the block
+				let mut was_jump = false;
+				for &(_, iscall) in state.todo_list().iter()
+				{
+					if iscall {
+					}
+					else {
+						was_jump = true;
+					}
+				}
+			}
+			
+			count += 1;
+			block.set_state( state.unwrap_data() );
+		}
 		count
 	}
 	

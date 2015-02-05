@@ -14,12 +14,19 @@ pub type BlockRef = Rc<RefCell<Block>>;
 
 pub struct Block
 {
-	first_ip: ::disasm::CodePtr,
-	last_ip: ::disasm::CodePtr,
+	first_ip: CodePtr,
+	last_ip: CodePtr,
 	instructions: Vec<Instruction>,
 	
-	refs: Vec<BlockRef>,
-	endstate: StateData,
+	refs: Vec<CodePtr>,
+	endstate: Option<StateData>,
+}
+
+pub struct Function
+{
+	start: CodePtr,
+	inputs: ::std::collections::BitvSet,
+	clobbers: ::std::collections::BitvSet,
 }
 
 impl Block
@@ -32,7 +39,7 @@ impl Block
 			last_ip:  instrs[instrs.len()-1].addr(),
 			instructions: instrs,
 			refs: Vec::new(),
-			endstate: Default::default(),
+			endstate: None,
 		}
 	}
 	
@@ -48,12 +55,14 @@ impl Block
 		let new_instrs = self.instructions.split_off(i);
 		
 		self.last_ip = self.instructions[self.instructions.len()-1].addr();
+		// Forget state if the block was split
+		self.endstate = None;
 		Block {
 			first_ip: new_instrs.first().unwrap().addr(),
 			last_ip: new_instrs.last().unwrap().addr(),
 			instructions: new_instrs,
-			refs: ::std::mem::replace(&mut self.refs, Default::default()),
-			endstate: ::std::mem::replace(&mut self.endstate, Default::default()),
+			refs: ::std::mem::replace(&mut self.refs, vec![addr]),
+			endstate: None,
 		}
 	}
 	
@@ -67,13 +76,13 @@ impl Block
 	pub fn last_addr(&self) -> ::disasm::CodePtr {
 		self.last_ip
 	}
-	pub fn end_state(&self) -> &StateData {
-		&self.endstate
+	pub fn end_state(&self) -> Option<&StateData> {
+		self.endstate.as_ref()
 	}
 	
 	pub fn set_state(&mut self, state: StateData) {
 		debug!("State for block {} set to: {:?}", self.first_ip, state);
-		self.endstate = state;
+		self.endstate = Some(state);
 	}
 }
 

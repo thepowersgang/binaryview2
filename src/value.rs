@@ -148,6 +148,15 @@ impl<T: ValueType> Value<T>
 		}
 	}
 	
+	pub fn is_unknown(&self) -> bool
+	{
+		match self
+		{
+		&Value::Unknown => true,
+		_ => false,
+		}
+	}
+	
 	pub fn is_fixed_set(&self) -> bool
 	{
 		match self

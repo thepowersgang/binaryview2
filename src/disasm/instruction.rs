@@ -19,8 +19,6 @@ pub struct Instruction
 	pub class: &'static InstructionClass,
 	params: Vec<InstrParam>,
 	
-	block: Option<::disasm::block::BlockRef>,
-	
 	is_target: bool,
 	is_call_target: bool,
 }
@@ -76,7 +74,6 @@ impl Instruction
 			opsize: opsize,
 			class: class,
 			params: params,
-			block: None,
 			is_target: false,
 			is_call_target: false,
 		}
@@ -89,9 +86,6 @@ impl Instruction
 	}
 	pub fn set_call_target(&mut self) {
 		self.is_call_target = true;
-	}
-	pub fn set_block(&mut self, blockref: ::disasm::block::BlockRef) {
-		self.block = Some( blockref );
 	}
 	
 	pub fn is_target(&self) -> bool { self.is_target }
@@ -111,7 +105,6 @@ impl Instruction
 	pub fn mode(&self) -> super::CPUMode { self.ip.mode() }
 	pub fn opsize(&self) -> InstrSize { self.opsize }
 	pub fn params(&self) -> &[InstrParam] { self.params.as_slice() }
-	pub fn block(&self) -> Option<::disasm::block::BlockRef> { self.block.clone() }
 }
 
 impl ::std::fmt::Debug for Instruction
