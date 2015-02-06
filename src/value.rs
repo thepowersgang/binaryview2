@@ -21,8 +21,12 @@ impl ValueType for u64 {}
 #[derive(Clone)]
 pub enum Value<T: ValueType>
 {
+	/// Value is completely unknown (or at least non-trivial)
 	Unknown,
+	/// Fully known value
 	Known(T),
+	//// Value is unknown, but has meaning
+	//Input(u8),
 	// TODO: Support value sets
 	//Set(Rc<Vec<T>>),
 	// TODO: Support range+mask (or similar)

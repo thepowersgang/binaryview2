@@ -5,6 +5,8 @@ use value::{Value,ValueBool,ValueType};
 use memory::MemoryStateAccess;
 use disasm::instruction::InstrParam;
 use disasm::CodePtr;
+use std::collections::BitvSet;
+use std::default::Default;
 
 const NUM_TMPREGS: usize = 4;
 
@@ -39,6 +41,11 @@ pub enum RunMode
 /// State data (stored separately to allow saving)
 pub struct StateData
 {
+	/// Markers indicating that the specified register was read before being written
+	inputs: BitvSet,
+	/// Helper for maintaining `inputs`
+	writtens: BitvSet,
+	
 	/// Real registers - Static vector
 	registers: Vec<Value<u64>>,
 	/// Temporary registers
@@ -116,17 +123,9 @@ impl<'mem> State<'mem>
 	{
 		let v = match param
 			{
-			InstrParam::TrueReg(r) => {
-				assert!( (r as usize) < self.data.registers.len() );
-				self.data.registers[r as usize].clone()
-				},
-			InstrParam::TmpReg(r) => {
-				assert!( (r as usize) < NUM_TMPREGS );
-				self.data.tmpregs[r as usize].clone()
-				},
-			InstrParam::Immediate(v) => {
-				Value::known(v)
-				},
+			InstrParam::TrueReg(r)   => self.data.read_reg(r),
+			InstrParam::TmpReg(r)    => self.data.read_tmp(r),
+			InstrParam::Immediate(v) => Value::known(v),
 			};
 		debug!("get({:?}) = {:?}", param, v);
 		v
@@ -137,14 +136,8 @@ impl<'mem> State<'mem>
 		debug!("set({:?} = {:?})", param, val);
 		match param
 		{
-		InstrParam::TrueReg(r) => {
-			assert!( (r as usize) < self.data.registers.len() );
-			self.data.registers[r as usize] = val;
-			},
-		InstrParam::TmpReg(r) => {
-			assert!( (r as usize) < NUM_TMPREGS );
-			self.data.tmpregs[r as usize] = val;
-			},
+		InstrParam::TrueReg(r) => self.data.write_reg(r, val),
+		InstrParam::TmpReg(r)  => self.data.write_tmp(r, val),
 		InstrParam::Immediate(_) => panic!("Setting an immediate"),
 		}
 	}
@@ -302,6 +295,32 @@ impl StateData
 			.. ::std::default::Default::default()
 		}
 	}
+	
+	fn read_reg(&mut self, idx: u8) -> Value<u64>
+	{
+		assert!( (idx as usize) < self.registers.len(), "Register index out of range");
+		if ! self.writtens.contains(&(idx as usize))
+		{
+			self.inputs.insert( idx as usize );
+		}
+		self.registers[idx as usize].clone()
+	}
+	fn read_tmp(&self, idx: u8) -> Value<u64>
+	{
+		assert!( (idx as usize) < NUM_TMPREGS, "Temp register index out of range" );
+		self.tmpregs[idx as usize].clone()
+	}
+	fn write_reg(&mut self, idx: u8, val: Value<u64>)
+	{
+		assert!( (idx as usize) < self.registers.len(), "Register index out of range");
+		self.writtens.insert( idx as usize );
+		self.registers[idx as usize] = val
+	}
+	fn write_tmp(&mut self, idx: u8, val: Value<u64>)
+	{
+		assert!( (idx as usize) < NUM_TMPREGS, "Temp register index out of range" );
+		self.tmpregs[idx as usize] = val
+	}
 }
 
 impl ::std::default::Default for StateData
@@ -309,6 +328,9 @@ impl ::std::default::Default for StateData
 	fn default() -> StateData
 	{
 		StateData {
+			inputs: Default::default(),
+			writtens: Default::default(),
+			
 			registers: Vec::new(),
 			tmpregs: [Value::unknown(), Value::unknown(), Value::unknown(), Value::unknown()],
 			stack: Vec::new(),
@@ -319,11 +341,15 @@ impl ::std::default::Default for StateData
 	}
 }
 
+// Note: Can't derive becuase fixed-size arrays clone using Copy
 impl ::std::clone::Clone for StateData
 {
 	fn clone(&self) -> StateData
 	{
 		StateData {
+			inputs: self.inputs.clone(),
+			writtens: self.writtens.clone(),
+			
 			registers: self.registers.clone(),
 			tmpregs: [self.tmpregs[0].clone(), self.tmpregs[1].clone(), self.tmpregs[2].clone(), self.tmpregs[3].clone()],
 			stack: self.stack.clone(),
