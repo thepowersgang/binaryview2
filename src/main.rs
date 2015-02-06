@@ -18,7 +18,7 @@ mod disasm;	// Disassembler
 //mod analyse;	// Analysis of the disassembled code (to produce more addresses, and get functions)
 mod parse;	// Configuration parsing
 
-static MAX_LOOPS: usize = 32;	// Maximum number of passes during disassembly+processing
+static MAX_LOOPS: usize = 50;	// Maximum number of passes during disassembly+processing
 
 fn main()
 {
@@ -86,8 +86,6 @@ fn main()
 	let mut pass_count = 0;
 	while pass_count < MAX_LOOPS
 	{
-		pass_count += 1;
-		
 		let mut cont = false;
 		// - Convert the current queue of "to-process" addresses (jump and call targets)
 		cont |= disasm.convert_queue() > 0;
@@ -101,6 +99,7 @@ fn main()
 		if !cont {
 			break;
 		}
+		pass_count += 1;
 	}
 	// - Dump output (JSON with states?)
 	debug!("TOTALS:");

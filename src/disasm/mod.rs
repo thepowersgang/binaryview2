@@ -19,6 +19,9 @@ pub type CPUMode = u32;
 #[derive(Copy,PartialEq,PartialOrd,Eq,Ord,Clone,Hash)]
 pub struct CodePtr(CPUMode, u64);
 
+#[derive(Copy,PartialEq,Eq,Clone,Hash)]
+pub struct CodeRange(CodePtr, CodePtr);
+
 trait CPU
 {
 	/// Return the number of CPU-defined registers
@@ -66,7 +69,7 @@ impl<'a> Disassembled<'a>
 	{
 		for block in self.blocks.iter()
 		{
-			if self.method_list.contains( &block.first_addr() )
+			if self.method_list.contains( &block.range().first() )
 			{
 				try!(write!(f, "\n"));
 				try!(write!(f, "\n"));
@@ -93,11 +96,15 @@ impl<'a> Disassembled<'a>
 	pub fn convert_queue(&mut self) -> usize
 	{
 		info!("convert_queue(): todo = {:?}", self.todo_list);
-		let todo = ::std::mem::replace(&mut self.todo_list, HashSet::new());
-		let ret = todo.len();
-		for ptr in todo.into_iter()
+		let mut ret = 0;
+		while self.todo_list.len() > 0
 		{
-			self.convert_from(ptr);
+			let todo = ::std::mem::replace(&mut self.todo_list, HashSet::new());
+			ret += todo.len();
+			for ptr in todo.into_iter()
+			{
+				self.convert_from(ptr);
+			}
 		}
 		ret
 	}
@@ -115,6 +122,7 @@ impl<'a> Disassembled<'a>
 			// Execute block
 			if block.end_state().is_some()
 			{
+				trace!("Block {} already has state: {}", block.range(), block.end_state().unwrap());
 				continue ;
 			}
 			
@@ -137,6 +145,7 @@ impl<'a> Disassembled<'a>
 			
 			count += 1;
 			block.set_state( state.unwrap_data() );
+			debug!("Block {}: New state {}", block.range(), block.end_state().unwrap());
 		}
 		count
 	}
@@ -168,16 +177,16 @@ impl<'a> Disassembled<'a>
 		
 		if let Ok(i) = self.blocks.binary_search_by(|e| e.partial_cmp(&ip).unwrap())
 		{
-			debug!("- Already converted, stored in block '{}--{}'", self.blocks[i].first_addr(), self.blocks[i].last_addr());
+			debug!("- Already converted, stored in block '{}'", self.blocks[i].range());
 			return ;
 		}
 		
 		// Actual disassembly call
 		let block = box self.convert_block(ip, &mut todo);
-		let i = match self.blocks.binary_search_by(|e| e.partial_cmp(&block.first_addr()).unwrap())
+		let i = match self.blocks.binary_search_by(|e| e.range().contains_ord(block.range().first()))
 			{
 			Err(i) => i,
-			Ok(_) => panic!("Block at address {} already converted", block.first_addr())
+			Ok(_) => panic!("Block at address {} already converted", block.range())
 			};
 		self.blocks.insert(i, block);
 		
@@ -190,24 +199,22 @@ impl<'a> Disassembled<'a>
 			// Find a block that contains this instruction
 			// - If found, split the block and tag the first instruction
 			// - Otherwise, add to the global to-do list
-			match self.blocks.binary_search_by(|e| e.partial_cmp(&item).unwrap())
+			match self.blocks.binary_search_by(|e| e.range().contains_ord(item))
 			{
 			Err(i) => {
 				if i > 0 {
-					trace!("i = {}, block = {:?}", i, self.blocks[i-1].first_addr());
-					assert!( self.blocks[i-1].first_addr() < item);
-					assert!( self.blocks[i-1].last_addr() < item);
+					trace!("i = {}, block = {}", i, self.blocks[i-1].range());
+					assert!( self.blocks[i-1].range().contains_ord(item) == ::std::cmp::Ordering::Less);
 				}
 				self.todo_list.insert( item );
 				},
 			Ok(i) => {
-				if self.blocks[i].first_addr() == item {
+				if self.blocks[i].range().first() == item {
 					// Equal, ignore
 					trace!("{} is block {}, ignoring", item, i);
 				}
 				else {
-					assert!( self.blocks[i].first_addr() < item );
-					assert!( self.blocks[i].last_addr() >= item );
+					assert!( self.blocks[i].range().contains(item) );
 					let newblock = box self.blocks[i].split_at(item);
 					self.blocks.insert(i+1, newblock);
 				}
@@ -311,6 +318,47 @@ impl ::std::fmt::Debug for CodePtr
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
 	{
 		write!(f, "{}:{:#x}", self.0, self.1)
+	}
+}
+
+impl CodeRange
+{
+	pub fn new(first: CodePtr, last: CodePtr) -> CodeRange
+	{
+		CodeRange(first, last)
+	}
+	
+	pub fn first(&self) -> CodePtr {
+		return self.0
+	}
+	pub fn last(&self) -> CodePtr {
+		return self.1
+	}
+	
+	pub fn contains(&self, ptr: CodePtr) -> bool {
+		self.contains_ord(ptr) == ::std::cmp::Ordering::Equal
+	}
+	pub fn contains_ord(&self, ptr: CodePtr) -> ::std::cmp::Ordering {
+		use std::cmp::Ordering;
+		match self.0.cmp(&ptr)
+		{
+		Ordering::Greater => Ordering::Greater,
+		Ordering::Equal => Ordering::Equal,
+		Ordering::Less => match self.1.cmp(&ptr)
+			{
+			Ordering::Greater => Ordering::Equal,
+			Ordering::Equal => Ordering::Equal,
+			Ordering::Less => Ordering::Less,
+			}
+		}
+	}
+}
+
+impl ::std::fmt::Display for CodeRange
+{
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result
+	{
+		write!(f, "{}--{}", self.0, self.1)
 	}
 }
 
