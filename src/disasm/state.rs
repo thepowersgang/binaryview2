@@ -71,6 +71,15 @@ impl<'mem> State<'mem>
 			todo_list: Vec::new(),	
 		}
 	}
+	pub fn from_data<'a>(mode: RunMode, cpu: &'a ::disasm::CPU, mem: &'a ::memory::MemoryState, data: StateData) -> State<'a>
+	{
+		State {
+			mode: mode,
+			memory: mem,
+			data: data,
+			todo_list: Vec::new(),
+		}
+	}
 	
 	//pub fn fill_canary(&mut self)
 	//{

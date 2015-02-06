@@ -20,9 +20,9 @@ pub struct Block
 	endstate: Option<StateData>,
 }
 
+#[derive(Debug,Default)]
 pub struct Function
 {
-	start: CodePtr,
 	inputs: ::std::collections::BitvSet,
 	clobbers: ::std::collections::BitvSet,
 }
@@ -61,6 +61,9 @@ impl Block
 	
 	pub fn instrs(&self) -> &[Instruction] {
 		&self.instructions[]
+	}
+	pub fn refs(&self) -> &[CodePtr] {
+		&self.refs[]
 	}
 	
 	pub fn range(&self) -> ::disasm::CodeRange {

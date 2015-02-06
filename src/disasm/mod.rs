@@ -6,7 +6,8 @@
 use self::state::{State,RunMode};
 use self::block::Block;
 use sortedlist::SortedList;	// Allows treating of collection types as sorted lists
-use std::collections::HashSet;
+use std::collections::{HashSet,HashMap};
+use std::default::Default;
 
 #[macro_use] mod common_instrs;
 mod state;
@@ -44,7 +45,7 @@ pub struct Disassembled<'a>
 	
 	todo_list: HashSet<CodePtr>,
 	// TODO: Store is_call flag
-	method_list: HashSet<CodePtr>,
+	method_list: HashMap<CodePtr,block::Function>,
 }
 
 impl<'a> Disassembled<'a>
@@ -55,8 +56,8 @@ impl<'a> Disassembled<'a>
 			memory: mem,
 			cpu: cpu,
 			blocks: Vec::new(),
-			todo_list: HashSet::new(),
-			method_list: HashSet::new(),
+			todo_list: Default::default(),
+			method_list: Default::default(),
 		}
 	}
 	/// Count total instructions converted
@@ -69,7 +70,7 @@ impl<'a> Disassembled<'a>
 	{
 		for block in self.blocks.iter()
 		{
-			if self.method_list.contains( &block.range().first() )
+			if self.method_list.contains_key( &block.range().first() )
 			{
 				try!(write!(f, "\n"));
 				try!(write!(f, "\n"));
@@ -86,7 +87,7 @@ impl<'a> Disassembled<'a>
 			}
 			if let Some(end_state_data) = block.end_state()
 			{
-				try!(write!(f, "{}\n", end_state_data));
+				try!(write!(f, "={}\n", end_state_data));
 			}
 		}
 		Ok( () )
@@ -154,18 +155,53 @@ impl<'a> Disassembled<'a>
 	pub fn pass_callingconv(&mut self) -> usize
 	{
 		// For all methods
-		//for instr in self.instructions.iter_mut()
-		//{
-		//	if ! instr.is_call_target() {
-		//		continue ;
-		//	}
-		//	
-		//	// - Create a state with all registers primed with Canary values
-		//	let state = State::null(RunMode::CallingConv, self.cpu, self.memory);
-		//	// - Execute (branching state at conditional/multitarget jumps)
-		//	// - When end of method is hit, save state.
-		//	// - Spot reverse jumps and (TODO) [Run until stable] [Stop]
-		//}
+		for (addr, info) in self.method_list.iter_mut()
+		{
+			debug!("Method {}: info={:?}", addr, info);
+			// - Create a state with all registers primed with Canary values
+			let mut state = State::null(RunMode::CallingConv, self.cpu, self.memory);
+			//state.prime_canary();
+			//self.cpu.prep_method(&mut state);
+			
+			let mut end_states = Vec::new();
+			
+			let block_idx = self.blocks.binary_search_by(|e| e.range().contains_ord(*addr)).ok().expect("Method code not disassembled");
+			let mut stack = Vec::<(usize, state::StateData)>::new();
+			stack.push( (block_idx, state.unwrap_data()) );
+			// - Execute (branching state at conditional/multitarget jumps)
+			while let Some( (block_idx, data) ) = stack.pop()
+			{
+				let mut state = State::from_data(RunMode::CallingConv, self.cpu, self.memory, data);
+				let block = &*self.blocks[block_idx];
+				//  > Run block to completion off 'current' state
+				for i in block.instrs()
+				{
+					state.run(i);
+				}
+				// - Spot reverse jumps and (TODO) [Run until stable] [Stop]
+				//  > If only one target, push current state to stack (along with target)
+				if block.refs().len() == 0
+				{
+					// - When end of method is hit, save state.
+					trace!("- Reached end of method");
+					end_states.push( state.unwrap_data() );
+				}
+				else if block.refs().len() == 1
+				{
+					let addr = block.refs()[0];
+					trace!("- Only option is {}", addr);
+					let block_idx = self.blocks.binary_search_by(|e| e.range().contains_ord(addr)).ok().expect("Target block isn't disassembled");
+					stack.push( (block_idx, state.unwrap_data()) );
+				}
+				//  > If multiples, clone state with branch condition
+				else
+				{
+					trace!("- Options are {:?}", block.refs());
+				}
+			}
+			// Collate end states
+			debug!("end_states = {:?}", end_states);
+		}
 		0
 	}
 	
@@ -286,7 +322,7 @@ impl<'a> Disassembled<'a>
 		{
 			todo.insert( addr.clone() );
 			if iscall {
-				self.method_list.insert( addr.clone() );
+				self.method_list.insert( addr.clone(), Default::default() );
 			}
 		}
 		
