@@ -267,18 +267,15 @@ impl<'mem,'call> State<'mem,'call>
 			match self.mode
 			{
 			RunMode::CallingConv => {
+				// need to take, as CallHandler is a &mut, and we're lending self to the handler
+				let handler = self.call_handler.take().expect("Running RunMode::CallingConv with no call handler");
 				for addr in val.possibilities()
 				{
 					let ptr = CodePtr::new(mode, addr);
-					//if let Some(f) = (self.call_fcn)(mode, val)
-					//{
-					//}
-					//else
-					//{
-						// Clobber nothing if the call returned nothing
-					//}
-					warn!("TODO: Call clobbering {:?}", ptr);
+					handler(self, ptr);
 				}
+				// - Restore handler once we're done
+				self.call_handler = Some(handler);
 				},
 			_ => {
 				// Fallback, clobber everything!

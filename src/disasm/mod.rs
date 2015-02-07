@@ -164,6 +164,7 @@ impl<'a> Disassembled<'a>
 		{
 			// A closure called by State::call() that handles the calling convention
 			let mut callee_lookup = |&mut: state: &mut state::State, tgt_addr: CodePtr| {
+				trace!("callee_lookup(tgt_addr={}), addr={}", tgt_addr, addr);
 				if tgt_addr == addr {
 					warn!("TODO: Handle direct recursion");
 					return ;
@@ -174,11 +175,13 @@ impl<'a> Disassembled<'a>
 				Some(i) => match i.cc_state()
 					{
 					block::CCState::Unknown => {
+						debug!("Method {} cc_state = Unknown", tgt_addr);
 						// Do nothing, the function is unknown (hence we can't know anything about it)
 						// - Flag currently caller as being partially known
 						will_be_fully_known = false;
 						},
 					block::CCState::Partial => {
+						debug!("Method {} cc_state = Partial", tgt_addr);
 						// We have partial knowledge of the function's register actions
 						// - Clobber clobbers and read from inputs
 						for r in i.inputs().iter() {
@@ -191,6 +194,7 @@ impl<'a> Disassembled<'a>
 						will_be_fully_known = false;
 						},
 					block::CCState::Full => {
+						debug!("Method {} cc_state = Full", tgt_addr);
 						// Function's register actons are fully known, so apply inputs and clobbers
 						// - DONT mark caller as partially known, as it's now fully known
 						for r in i.inputs().iter() {
@@ -267,25 +271,37 @@ impl<'a> Disassembled<'a>
 	/// Determine the calling convention for methods
 	pub fn pass_callingconv(&mut self) -> usize
 	{
-		// For all methods
-		// TODO: Need to satisfy borrow checker by taking a list of method addresses and not holding on to method_list
-		// - method_list is needed by callee lookup
-		let methods: Vec<_> = self.method_list.keys().map(|x| *x).collect();
-		for addr in methods
+		let mut ret = 0;
+
+		// For all methods, run and locate clobbers/inputs
+		// NOTE: pass_callingconv_runfcn requires access to self.method_list, so we can't lock it
+		for addr in self.method_list.keys().map(|x| *x).collect::<Vec<_>>()
 		{
 			debug!("Method {}: info={:?}", addr, self.method_list[addr]);
 			
-			if self.method_list[addr].is_populated()
-			{
-				trace!("- Method already handled");
+			let start_state = self.method_list[addr].cc_state();
+			
+			// Return if cc_state is Full
+			if start_state == block::CCState::Full {
+				trace!("- Function fully known");
 				continue ;
 			}
+			
 	
 			let (fully_known, clobbers, inputs) = self.pass_callingconv_runfcn(addr);
-		
 			self.method_list[addr].set_reg_usage(fully_known, inputs, clobbers);
+			
+			// Only increment count if the state changed
+			let new_state = self.method_list[addr].cc_state();
+			if new_state != start_state
+			{
+				assert!(new_state != block::CCState::Unknown);
+				assert!(start_state != block::CCState::Full);
+				ret += 1;
+			}
 		}
-		0
+		
+		ret
 	}
 	
 	/// Disassemble starting from a given address

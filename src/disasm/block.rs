@@ -128,6 +128,7 @@ impl Function
 	}
 	pub fn set_reg_usage(&mut self, fully_known: bool, inputs: BitvSet, clobbers: BitvSet)
 	{
+		debug!("Function::set_reg_usage(fully_known={}, inputs={:?}, clobbers={:?}", fully_known, inputs, clobbers);
 		self.populated = true;
 		self.populate_state = if fully_known { CCState::Full } else { CCState::Partial };
 		self.inputs = inputs;
