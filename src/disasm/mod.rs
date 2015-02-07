@@ -8,6 +8,7 @@ use self::block::Block;
 use sortedlist::SortedList;	// Allows treating of collection types as sorted lists
 use std::collections::{HashSet,HashMap};
 use std::default::Default;
+use value::Value;
 
 #[macro_use] mod common_instrs;
 mod state;
@@ -70,10 +71,10 @@ impl<'a> Disassembled<'a>
 	{
 		for block in self.blocks.iter()
 		{
-			if self.method_list.contains_key( &block.range().first() )
+			if let Some(info) = self.method_list.get( &block.range().first() )
 			{
 				try!(write!(f, "\n"));
-				try!(write!(f, "\n"));
+				try!(write!(f, "{}\n", info));
 				// TODO: Print method information (clobbers, outputs, etc)
 				try!(write!(f, "@"));
 			}
@@ -151,27 +152,75 @@ impl<'a> Disassembled<'a>
 		count
 	}
 	
-	/// Determine the calling convention for methods
-	pub fn pass_callingconv(&mut self) -> usize
+	/// Run a single function, determining what registers it uses and clobbers
+	///
+	/// Returns (will_be_fully_known, clobbers, inputs)
+	fn pass_callingconv_runfcn(&self, addr: CodePtr) -> (bool, ::std::collections::BitvSet, ::std::collections::BitvSet)
 	{
-		// For all methods
-		for (addr, info) in self.method_list.iter_mut()
+		let mut end_states = Vec::new();
+		let mut will_be_fully_known = true;	// cleared if non-fully-known method is called
+		
+		// Open scope to properly end the borrows owned by callee_lookup
 		{
-			debug!("Method {}: info={:?}", addr, info);
+			// A closure called by State::call() that handles the calling convention
+			let mut callee_lookup = |&mut: state: &mut state::State, tgt_addr: CodePtr| {
+				if tgt_addr == addr {
+					warn!("TODO: Handle direct recursion");
+					return ;
+				}
+				// Locate method with this address
+				match self.method_list.get(&tgt_addr)
+				{
+				Some(i) => match i.cc_state()
+					{
+					block::CCState::Unknown => {
+						// Do nothing, the function is unknown (hence we can't know anything about it)
+						// - Flag currently caller as being partially known
+						will_be_fully_known = false;
+						},
+					block::CCState::Partial => {
+						// We have partial knowledge of the function's register actions
+						// - Clobber clobbers and read from inputs
+						for r in i.inputs().iter() {
+							state.data_mut().read_reg(r as u8);
+						}
+						for r in i.clobbers().iter() {
+							state.data_mut().write_reg(r as u8, Value::Unknown);
+						}
+						// - Flag callee as only being partially known
+						will_be_fully_known = false;
+						},
+					block::CCState::Full => {
+						// Function's register actons are fully known, so apply inputs and clobbers
+						// - DONT mark caller as partially known, as it's now fully known
+						for r in i.inputs().iter() {
+							state.data_mut().read_reg(r as u8);
+						}
+						for r in i.clobbers().iter() {
+							state.data_mut().write_reg(r as u8, Value::Unknown);
+						}
+						},
+					},
+				None => {
+					warn!("Calling unknown function {} in calling convention pass", addr);
+					},
+				}
+				};
+			
 			// - Create a state with all registers primed with Canary values
-			let mut state = State::null(RunMode::CallingConv, self.cpu, self.memory);
-			//state.prime_canary();
-			//self.cpu.prep_method(&mut state);
-			
-			let mut end_states = Vec::new();
-			
-			let block_idx = self.blocks.binary_search_by(|e| e.range().contains_ord(*addr)).ok().expect("Method code not disassembled");
+			let init_state = {
+				let mut state = State::null(RunMode::CallingConv, self.cpu, self.memory);
+				state.fill_canary();
+				//self.cpu.prep_method(&mut state);
+				state.unwrap_data()
+				};
+			let block_idx = self.blocks.binary_search_by(|e| e.range().contains_ord(addr)).ok().expect("Method code not disassembled");
 			let mut stack = Vec::<(usize, state::StateData)>::new();
-			stack.push( (block_idx, state.unwrap_data()) );
+			stack.push( (block_idx, init_state) );
 			// - Execute (branching state at conditional/multitarget jumps)
 			while let Some( (block_idx, data) ) = stack.pop()
 			{
-				let mut state = State::from_data(RunMode::CallingConv, self.cpu, self.memory, data);
+				let mut state = State::from_data(RunMode::CallingConv, self.memory, data, &mut callee_lookup);
 				let block = &*self.blocks[block_idx];
 				//  > Run block to completion off 'current' state
 				for i in block.instrs()
@@ -199,8 +248,42 @@ impl<'a> Disassembled<'a>
 					trace!("- Options are {:?}", block.refs());
 				}
 			}
-			// Collate end states
-			debug!("end_states = {:?}", end_states);
+		}
+		// Collate end states
+		debug!("end_states = {:?}", end_states);
+		let mut clobbers = ::std::collections::BitvSet::new();
+		let mut inputs = ::std::collections::BitvSet::new();
+		for sd in end_states
+		{
+			trace!("Clobbers: {:?} |= {:?}", clobbers, sd.get_clobbers());
+			clobbers.union_with( &sd.get_clobbers() );
+			trace!("Inputs: {:?} |= {:?}", inputs, sd.get_inputs());
+			inputs.union_with( &sd.get_inputs() );
+		}
+		
+		(will_be_fully_known, clobbers, inputs)
+	}
+	
+	/// Determine the calling convention for methods
+	pub fn pass_callingconv(&mut self) -> usize
+	{
+		// For all methods
+		// TODO: Need to satisfy borrow checker by taking a list of method addresses and not holding on to method_list
+		// - method_list is needed by callee lookup
+		let methods: Vec<_> = self.method_list.keys().map(|x| *x).collect();
+		for addr in methods
+		{
+			debug!("Method {}: info={:?}", addr, self.method_list[addr]);
+			
+			if self.method_list[addr].is_populated()
+			{
+				trace!("- Method already handled");
+				continue ;
+			}
+	
+			let (fully_known, clobbers, inputs) = self.pass_callingconv_runfcn(addr);
+		
+			self.method_list[addr].set_reg_usage(fully_known, inputs, clobbers);
 		}
 		0
 	}

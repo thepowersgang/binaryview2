@@ -10,8 +10,10 @@ use std::default::Default;
 
 const NUM_TMPREGS: usize = 4;
 
+type CallHandler<'call> = &'call mut (FnMut(&mut State, CodePtr)->() + 'call);
+
 /// Emulated CPU state during pseudo-execution
-pub struct State<'mem>
+pub struct State<'mem,'call>
 {
 	/// Execution/Simulation mode
 	mode: RunMode,
@@ -24,6 +26,8 @@ pub struct State<'mem>
 
 	/// State data (flags, registers)
 	data: StateData,
+	
+	call_handler: Option<CallHandler<'call>>,
 }
 
 pub enum RunMode
@@ -66,39 +70,44 @@ pub enum StatusFlags
 	Overflow,
 }
 
-impl<'mem> State<'mem>
+impl<'mem,'call> State<'mem,'call>
 {
 	/// Create a new empty state
-	pub fn null<'a>(mode: RunMode, cpu: &'a ::disasm::CPU, mem: &'a ::memory::MemoryState) -> State<'a>
+	pub fn null<'a>(mode: RunMode, cpu: &'a ::disasm::CPU, mem: &'a ::memory::MemoryState) -> State<'a,'static>
 	{
 		State {
 			mode: mode,	// TODO: Receive as an argument
 			memory: mem,
 			data: StateData::new(cpu),
 			todo_list: Vec::new(),	
+			call_handler: None,
 		}
 	}
-	pub fn from_data<'a>(mode: RunMode, cpu: &'a ::disasm::CPU, mem: &'a ::memory::MemoryState, data: StateData) -> State<'a>
+	pub fn from_data<'a,'c>(mode: RunMode, mem: &'a ::memory::MemoryState, data: StateData, ch: CallHandler<'c>) -> State<'a,'c>
 	{
 		State {
 			mode: mode,
 			memory: mem,
 			data: data,
 			todo_list: Vec::new(),
+			call_handler: Some(ch),
 		}
 	}
 	
-	//pub fn fill_canary(&mut self)
-	//{
-	//	for reg in self.data.registers.iter_mut()
-	//	{
-	//		*reg = Value::canary();
-	//	}
-	//}
+	pub fn fill_canary(&mut self)
+	{
+		for (i,reg) in self.data.registers.iter_mut().enumerate()
+		{
+			*reg = Value::Input(i as u8);
+		}
+	}
 	
 	//pub fn data(&self) -> &StateData {
 	//	&self.data
 	//}
+	pub fn data_mut(&mut self) -> &mut StateData {
+		&mut self.data
+	}
 	pub fn unwrap_data(self) -> StateData {
 		self.data
 	}
@@ -212,18 +221,16 @@ impl<'mem> State<'mem>
 		debug!("stack_push({:?})", val);
 		match self.mode
 		{
-		RunMode::Blockify|RunMode::Full => {
-			self.data.stack.push(val);
-			},
-		_ => {},
+		RunMode::Parse => {},
+		_ => self.data.stack.push(val),
 		}
 	}
 	pub fn stack_pop(&mut self) -> Value<u64>
 	{
 		let rv = match self.mode
 			{
-			RunMode::Blockify|RunMode::Full =>
-				match self.data.stack.pop()
+			RunMode::Parse => Value::unknown(),
+			_ => match self.data.stack.pop()
 				{
 				Some(x) => x,
 				None => {
@@ -231,7 +238,6 @@ impl<'mem> State<'mem>
 					Value::unknown()
 					},
 				},
-			_ => Value::unknown(),
 			};
 		debug!("stack_pop() = {:?}", rv);
 		rv
@@ -258,15 +264,27 @@ impl<'mem> State<'mem>
 			{
 				self.todo_list.push( (CodePtr::new(mode, addr),true) );
 			}
-			warn!("TODO: Call clobbering {:?} mode={}", val, mode);
-			//if let Some(f) = state.functions.find( (mode,val
-			//{
-			//}
-			//else
-			//{
+			match self.mode
+			{
+			RunMode::CallingConv => {
+				for addr in val.possibilities()
+				{
+					let ptr = CodePtr::new(mode, addr);
+					//if let Some(f) = (self.call_fcn)(mode, val)
+					//{
+					//}
+					//else
+					//{
+						// Clobber nothing if the call returned nothing
+					//}
+					warn!("TODO: Call clobbering {:?}", ptr);
+				}
+				},
+			_ => {
 				// Fallback, clobber everything!
 				self.clobber_everything();
-			//}
+				}
+			}
 		}
 		else
 		{
@@ -296,7 +314,24 @@ impl StateData
 		}
 	}
 	
-	fn read_reg(&mut self, idx: u8) -> Value<u64>
+	pub fn get_inputs(&self) -> BitvSet
+	{
+		self.inputs.clone()
+	}
+	pub fn get_clobbers(&self) -> BitvSet
+	{
+		let mut ret = BitvSet::with_capacity(self.registers.len());
+		for (i,reg) in self.registers.iter().enumerate()
+		{
+			if *reg != Value::Input(i as u8)
+			{
+				ret.insert( i );
+			}
+		}
+		ret
+	}
+	
+	pub fn read_reg(&mut self, idx: u8) -> Value<u64>
 	{
 		assert!( (idx as usize) < self.registers.len(), "Register index out of range");
 		if ! self.writtens.contains(&(idx as usize))
@@ -310,7 +345,7 @@ impl StateData
 		assert!( (idx as usize) < NUM_TMPREGS, "Temp register index out of range" );
 		self.tmpregs[idx as usize].clone()
 	}
-	fn write_reg(&mut self, idx: u8, val: Value<u64>)
+	pub fn write_reg(&mut self, idx: u8, val: Value<u64>)
 	{
 		assert!( (idx as usize) < self.registers.len(), "Register index out of range");
 		self.writtens.insert( idx as usize );
@@ -377,6 +412,7 @@ impl ::std::fmt::Debug for StateData
 		try!( write!(f, "\n") );
 		try!( write!(f, "  Stack: {:?}\n", self.stack) );
 		try!( write!(f, "  Flags: C={:?} V={:?}\n", self.flag_c, self.flag_v) );
+		try!( write!(f, "  Inputs: {:?} Writtens: {:?}\n", self.inputs, self.writtens) );
 		try!( write!(f, "}}") );
 		Ok( () )
 	}

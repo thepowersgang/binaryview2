@@ -21,12 +21,12 @@ impl ValueType for u64 {}
 #[derive(Clone)]
 pub enum Value<T: ValueType>
 {
+	/// Value is unknown, but has meaning
+	Input(u8),
 	/// Value is completely unknown (or at least non-trivial)
 	Unknown,
 	/// Fully known value
 	Known(T),
-	//// Value is unknown, but has meaning
-	//Input(u8),
 	// TODO: Support value sets
 	//Set(Rc<Vec<T>>),
 	// TODO: Support range+mask (or similar)
@@ -137,6 +137,7 @@ impl<T: ValueType> Value<T>
 			let a_u: U = Value::<U>::cast(a);
 			Value::Known(a_u)
 			}
+		&Value::Input(_) => Value::Unknown,
 		&Value::Unknown => Value::Unknown,
 		}
 	}
@@ -165,6 +166,7 @@ impl<T: ValueType> Value<T>
 	{
 		match self
 		{
+		&Value::Input(_) => false,
 		&Value::Unknown => false,
 		&Value::Known(_) => true,
 		}
@@ -186,6 +188,7 @@ impl<T: ValueType> Value<T>
 		let mask = one << pos;
 		match self
 		{
+		&Value::Input(_) => ValueBool::Unknown,
 		&Value::Unknown => ValueBool::Unknown,
 		&Value::Known(v) =>
 			if v & mask != Int::zero() {
@@ -221,6 +224,8 @@ impl<T: ValueType> ::std::ops::Add for Value<T>
 		{
 		(Value::Unknown,_) => Value::Unknown,
 		(_,Value::Unknown) => Value::Unknown,
+		(Value::Input(_),_) => Value::Unknown,
+		(_,Value::Input(_)) => Value::Unknown,
 		(Value::Known(a),Value::Known(b)) => Value::Known(a+b),
 		}
 	}
@@ -242,6 +247,8 @@ impl<T: ValueType> ::std::ops::Sub for Value<T>
 		// - Pure unknown poisons
 		(Value::Unknown,_) => Value::Unknown,
 		(_,Value::Unknown) => Value::Unknown,
+		(Value::Input(_),_) => Value::Unknown,
+		(_,Value::Input(_)) => Value::Unknown,
 		// - Known resolves
 		(Value::Known(a),Value::Known(b)) => Value::Known(a-b),
 		}
@@ -277,6 +284,8 @@ impl<T: ValueType> ::std::ops::Mul for Value<T>
 		// Otherwise, unknown values are poisonous
 		(Value::Unknown,_) => (Value::Unknown,Value::Unknown),
 		(_,Value::Unknown) => (Value::Unknown,Value::Unknown),
+		(Value::Input(_),_) => (Value::Unknown,Value::Unknown),
+		(_,Value::Input(_)) => (Value::Unknown,Value::Unknown),
 		// But known values are fixed
 		(Value::Known(a),Value::Known(b)) => {
 			if a*b < a || a*b < b {
@@ -302,6 +311,8 @@ impl<T: ValueType> ::std::ops::BitAnd for Value<T>
 		// - Pure unkown poisons
 		(Value::Unknown,_) => Value::Unknown,
 		(_,Value::Unknown) => Value::Unknown,
+		(Value::Input(_),_) => Value::Unknown,
+		(_,Value::Input(_)) => Value::Unknown,
 		// - Known resolves
 		(Value::Known(a),Value::Known(b)) => Value::Known(a&b),
 		}
@@ -318,6 +329,8 @@ impl<T: ValueType> ::std::ops::BitOr for Value<T>
 		{
 		(Value::Unknown,_) => Value::Unknown,
 		(_,Value::Unknown) => Value::Unknown,
+		(Value::Input(_),_) => Value::Unknown,
+		(_,Value::Input(_)) => Value::Unknown,
 		(Value::Known(a),Value::Known(b)) => Value::Known(a|b),
 		}
 	}
@@ -332,6 +345,8 @@ impl<T: ValueType> ::std::ops::BitXor for Value<T>
 		{
 		(Value::Unknown,_) => Value::Unknown,
 		(_,Value::Unknown) => Value::Unknown,
+		(Value::Input(_),_) => Value::Unknown,
+		(_,Value::Input(_)) => Value::Unknown,
 		(Value::Known(a),Value::Known(b)) => Value::Known(a^b),
 		}
 	}
@@ -345,6 +360,7 @@ impl<T: ValueType> ::std::ops::Not for Value<T>
 	{
 		match self
 		{
+		Value::Input(_) => Value::Unknown,
 		Value::Unknown => Value::Unknown,
 		Value::Known(a) => Value::Known(!a),
 		}
@@ -409,11 +425,10 @@ impl<T: ValueType> ::std::cmp::PartialEq for Value<T>
 {
 	fn eq(&self, other: &Value<T>) -> bool
 	{
-		match (self,other)
+		match ::std::cmp::PartialOrd::partial_cmp(self, other)
 		{
-		(&Value::Unknown,_) => false,
-		(_,&Value::Unknown) => false,
-		(&Value::Known(a),&Value::Known(b)) => a == b,
+		Some(Ordering::Equal) => true,
+		_ => false,
 		}
 	}
 }
@@ -423,6 +438,9 @@ impl<T: ValueType> ::std::cmp::PartialOrd for Value<T>
 	{
 		match (self,other)
 		{
+		(&Value::Input(i1), &Value::Input(i2)) => if i1 == i2 { Some(Ordering::Equal) } else { None },
+		(&Value::Input(_),_) => None,
+		(_,&Value::Input(_)) => None,
 		(&Value::Unknown,_) => None,
 		(_,&Value::Unknown) => None,
 		(&Value::Known(a),&Value::Known(b)) => a.partial_cmp(&b),
@@ -437,6 +455,7 @@ impl<T: ValueType> ::std::fmt::Debug for Value<T>
 	{
 		match self
 		{
+		&Value::Input(i) => write!(f, "I{}", i),
 		&Value::Unknown => write!(f, "?"),
 		&Value::Known(v) => write!(f, "{:#x}", v),
 		}
@@ -450,6 +469,7 @@ impl<'a,T: ValueType> Iterator for ValuePossibilities<'a,T>
 	{
 		let rv = match self.val
 			{
+			&Value::Input(_) => panic!("Can't get possibilities for an unknown value"),
 			&Value::Unknown => panic!("Can't get possibilities for an unknown value"),
 			&Value::Known(v) => {
 				if self.idx == 0 { Some(v) } else { None }
