@@ -66,6 +66,11 @@ impl<'a> Disassembled<'a>
 		self.blocks.iter().fold(0, |v,x| v + x.instrs().len())
 	}
 	
+	fn find_block_for(&self, addr: CodePtr) -> Result<usize,usize>
+	{
+		self.blocks.binary_search_by(|e| e.range().contains_ord(addr))
+	}
+	
 	// TODO: Should this be moved to being Debug or Display?
 	pub fn dump(&self, f: &mut ::std::fmt::Writer) -> ::std::fmt::Result
 	{
@@ -75,7 +80,6 @@ impl<'a> Disassembled<'a>
 			{
 				try!(write!(f, "\n"));
 				try!(write!(f, "{}\n", info));
-				// TODO: Print method information (clobbers, outputs, etc)
 				try!(write!(f, "@"));
 			}
 			else
@@ -218,11 +222,11 @@ impl<'a> Disassembled<'a>
 				//self.cpu.prep_method(&mut state);
 				state.unwrap_data()
 				};
-			let block_idx = self.blocks.binary_search_by(|e| e.range().contains_ord(addr)).ok().expect("Method code not disassembled");
-			let mut stack = Vec::<(usize, state::StateData)>::new();
-			stack.push( (block_idx, init_state) );
+			let block_idx = self.find_block_for(addr).ok().expect("Method code not disassembled");
+			let mut stack = Vec::<(usize, state::StateData, Vec<usize>)>::new();
+			stack.push( (block_idx, init_state, Vec::new()) );
 			// - Execute (branching state at conditional/multitarget jumps)
-			while let Some( (block_idx, data) ) = stack.pop()
+			while let Some( (block_idx, data, history) ) = stack.pop()
 			{
 				let mut state = State::from_data(RunMode::CallingConv, self.memory, data, &mut callee_lookup);
 				let block = &*self.blocks[block_idx];
@@ -243,14 +247,45 @@ impl<'a> Disassembled<'a>
 				{
 					let addr = block.refs()[0];
 					trace!("- Only option is {}", addr);
-					let block_idx = self.blocks.binary_search_by(|e| e.range().contains_ord(addr)).ok().expect("Target block isn't disassembled");
-					stack.push( (block_idx, state.unwrap_data()) );
+					let mut newhist = history;
+					newhist.push(block_idx);
+					let block_idx = self.find_block_for(addr).ok().expect("Target block isn't disassembled");
+					if newhist.contains(&block_idx)
+					{
+						trace!("- Loopback, ignoring (TODO: Handle)");
+						continue ;
+					}
+					stack.push( (block_idx, state.unwrap_data(), newhist) );
 				}
 				//  > If multiples, clone state with branch condition
 				else
 				{
-					trace!("- Options are {:?}", block.refs());
+					let refs = block.refs();
+					trace!("- Options are {:?}", refs);
+					let mut newhist = history;
+					newhist.push(block_idx);
+					let data = state.unwrap_data();
+					for &addr in refs.init()	// all but last
+					{
+						let next_block_idx = self.find_block_for(addr).ok().expect("Target block isn't disassembled");
+						if newhist.contains(&next_block_idx)
+						{
+							trace!("- Loopback, ignoring (TODO: Handle)");
+							continue ;
+						}
+						stack.push( (next_block_idx, data.clone(), newhist.clone()) );
+					}
+					
+					let &addr = refs.last().unwrap();
+					let next_block_idx = self.find_block_for(addr).ok().expect("Target block isn't disassembled");
+					if newhist.contains(&next_block_idx)
+					{
+						trace!("- Loopback, ignoring (TODO: Handle)");
+						continue ;
+					}
+					stack.push( (next_block_idx, data, newhist) );
 				}
+				//debug!("New Stack = {:?}", stack);
 			}
 		}
 		// Collate end states
@@ -310,15 +345,26 @@ impl<'a> Disassembled<'a>
 		debug!("convert_from(ip={})", ip);
 		let mut todo = HashSet::<CodePtr>::new();
 		
-		if let Ok(i) = self.blocks.binary_search_by(|e| e.partial_cmp(&ip).unwrap())
+		if let Ok(i) = self.find_block_for(ip)
 		{
-			debug!("- Already converted, stored in block '{}'", self.blocks[i].range());
+			let range = self.blocks[i].range();
+			if range.first() == ip
+			{
+				debug!("- {} already converted, start of block to {}", ip, range.last());
+			}
+			else
+			{
+				debug!("- {} already converted, stored in block '{}', breaking", ip, range);
+				
+				let newblock = box self.blocks[i].split_at(ip);
+				self.blocks.insert(i+1, newblock);
+			}
 			return ;
 		}
 		
 		// Actual disassembly call
 		let block = box self.convert_block(ip, &mut todo);
-		let i = match self.blocks.binary_search_by(|e| e.range().contains_ord(block.range().first()))
+		let i = match self.find_block_for(block.range().first())
 			{
 			Err(i) => i,
 			Ok(_) => panic!("Block at address {} already converted", block.range())
@@ -334,7 +380,7 @@ impl<'a> Disassembled<'a>
 			// Find a block that contains this instruction
 			// - If found, split the block and tag the first instruction
 			// - Otherwise, add to the global to-do list
-			match self.blocks.binary_search_by(|e| e.range().contains_ord(item))
+			match self.find_block_for(item)
 			{
 			Err(i) => {
 				if i > 0 {
@@ -366,6 +412,8 @@ impl<'a> Disassembled<'a>
 		let mut state = State::null(RunMode::Parse, self.cpu, self.memory);
 		let mut instructions = Vec::new(); 
 		
+		let mut link_to_next = true;
+		
 		let mut addr = start.addr();
 		let mode = start.mode();
 		
@@ -394,20 +442,35 @@ impl<'a> Disassembled<'a>
 			instr.set_addr( CodePtr(mode, addr) );
 			debug!("> {:?}", instr);
 			
+			// Instruction was conditional, stop the current block and run with this instruction in a separate block
+			if instr.is_conditional() {
+				todo.insert( CodePtr::new(mode, addr + instr.len as u64) );
+			
+				// If we're processing an instruction AFTER the first, break
+				if ! instructions.is_empty() {
+					// Leave link_to_next as true, it will lead to linking this block with the conditional
+					todo.insert( CodePtr::new(mode, addr) );
+					trace!("- Conditional, breaking");
+					break;
+				}
+			}
+			
 			// Execute with minimal state
 			self.cpu.prep_state(&mut state, addr, mode);
 			state.run(&instr);
 			
 			let is_terminal = instr.is_terminal();
-			let is_cnd = instr.is_conditional();
+			
 			addr += instr.len as u64;
 			instructions.push(instr);
 			
 			// If instruction is terminal, break out of loop
 			if is_terminal {
+				link_to_next = false;
 				break;
 			}
-			if is_cnd {
+			let found_tgt = self.find_block_for( CodePtr::new(mode, addr) ).is_ok();
+			if found_tgt {
 				todo.insert( CodePtr::new(mode, addr) );
 				break;
 			}
@@ -416,6 +479,12 @@ impl<'a> Disassembled<'a>
 		instructions[0].set_target();
 
 		
+		let mut refs = Vec::new();
+		
+		if link_to_next {
+			refs.push( CodePtr::new(mode, addr) );
+		}
+		
 		// Get list of jump targets from instruction
 		for &(addr,iscall) in state.todo_list().iter()
 		{
@@ -423,10 +492,13 @@ impl<'a> Disassembled<'a>
 			if iscall {
 				self.method_list.insert( addr.clone(), Default::default() );
 			}
+			else {
+				refs.push( addr.clone() );
+			}
 		}
 		
 		debug!("- Complete at IP={:#x}", addr);
-		Block::new(instructions)
+		Block::new(instructions, refs)
 	}
 }
 

@@ -39,21 +39,27 @@ pub struct Function
 	name: String,
 	/// How correct the inputs/clobbers values are
 	populate_state: CCState,
-	/// Set when inputs/clobbers are populated
-	populated: bool,
 	inputs: BitvSet,
 	clobbers: BitvSet,
 }
 
 impl Block
 {
-	pub fn new(instrs: Vec<Instruction>) -> Block
+	pub fn new(instrs: Vec<Instruction>, refs: Vec<CodePtr>) -> Block
 	{
 		debug!("New block for {}", instrs[0].addr());
 		Block {
 			instructions: instrs,
-			refs: Vec::new(),
+			refs: refs,
 			endstate: None,
+		}
+	}
+	
+	pub fn add_ref(&mut self, addr: CodePtr)
+	{
+		if ! self.refs.contains(&addr)
+		{
+			self.refs.push( addr );
 		}
 	}
 	
@@ -65,7 +71,7 @@ impl Block
 			Ok(i) => i,
 			Err(_) => panic!("Address {} not in block ({})", addr, self.range()),
 			};
-		trace!("i = {}", i);
+		trace!("splitting at {}, pos = {}", addr, i);
 		let new_instrs = self.instructions.split_off(i);
 		
 		// Forget state if the block was split
@@ -122,14 +128,9 @@ impl Default for CCState
 
 impl Function
 {
-	pub fn is_populated(&self) -> bool
-	{
-		self.populated
-	}
 	pub fn set_reg_usage(&mut self, fully_known: bool, inputs: BitvSet, clobbers: BitvSet)
 	{
 		debug!("Function::set_reg_usage(fully_known={}, inputs={:?}, clobbers={:?}", fully_known, inputs, clobbers);
-		self.populated = true;
 		self.populate_state = if fully_known { CCState::Full } else { CCState::Partial };
 		self.inputs = inputs;
 		self.clobbers = clobbers;

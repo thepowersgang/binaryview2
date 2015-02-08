@@ -14,28 +14,8 @@ Microcode:
 
 
 
-
-Representation:
-- Vec<Instruction>?
-
-Functions -> Block Tree -> Instructions
-
-
-struct Program
-{
-	blocks: Vec<Block<Block>>,	// sorted by address of first block?
-	functions: Vec<CodePtr>,	// First instruction
-}
-struct Function
-{
-	start: CodePtr,
-	inputs: BitSet,
-	clobbers: BitSet,
-	outputs: BitSet,
-	
-}
-struct Block
-{
-	instrs: Vec<Instruction>,
-}
+Issues:
+- Handling pushed/restored values as not being inputs
+ > Special case for push?
+ > Track the value itself and flag when it's actually used (consumed by an operation/conversion)
 
