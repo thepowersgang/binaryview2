@@ -1,15 +1,32 @@
 //
 //
 //
-#![feature(box_syntax)]
-#![feature(core,std_misc,os,io,path,collections,unicode,hash)]
-#![feature(libc)]	// Used by lexer, probably shouldn't
+use std::collections::HashMap;
 
 #[macro_use] extern crate log;
 extern crate env_logger;
 extern crate getopts;
+extern crate num;
+extern crate bit_set;
 
-mod sortedlist;	// Trait - Provides a sorted list interface to generic types
+/// Implements the From trait for the provided type, avoiding boilerplate
+#[macro_export]
+macro_rules! impl_from {
+	(@as_item $($i:item)*) => {$($i)*};
+
+	($( $(<($($params:tt)+)>)* From<$src:ty>($v:ident) for $t:ty { $($code:stmt)*} )+) => {
+		$(impl_from!{ @as_item 
+			impl$(<$($params)+>)* ::std::convert::From<$src> for $t {
+				fn from($v: $src) -> $t {
+					$($code)*
+				}
+			}
+		})+
+	};
+}
+
+
+//mod sortedlist;	// Trait - Provides a sorted list interface to generic types
 
 mod value;	// Value type
 mod memory;	// Memory
@@ -23,31 +40,31 @@ static MAX_LOOPS: usize = 50;	// Maximum number of passes during disassembly+pro
 fn main()
 {
 	env_logger::init().unwrap();
-	let str_args = ::std::os::args();
+	let str_args: Vec<_> = ::std::env::args().collect();
 	// - Parse arguments
 	let mut opts = getopts::Options::new();
 	opts.optopt("m", "memmap", "Set memory map filename", "FILE");
 	opts.optopt("t", "types", "Set type list filename", "FILE");
-	let args = match opts.parse(str_args.tail())
+	let args = match opts.parse(&str_args[1..])
 		{
 		Ok(v) => v,
 		Err(reason) => panic!("getopts() failed: {}", reason),
 		};
-	let typesfile = args.opt_str("types").unwrap_or( String::from_str("types.txt") );
-	let mapfile = args.opt_str("memmap").unwrap_or( String::from_str("memorymap.txt") );
+	let typesfile = args.opt_str("types").unwrap_or( String::from("types.txt") );
+	let mapfile = args.opt_str("memmap").unwrap_or( String::from("memorymap.txt") );
 	// - Open input files
-	let mut infiles: std::collections::HashMap<String,::std::old_io::File> = args.free.iter().map(|p| {
+	let mut infiles: HashMap<_, _> = args.free.iter().map(|p| {
 		let mut s = p.split('=');
 		let ident = s.next().unwrap();
 		let path = s.next().expect("ERROR: Free arguments should be of the form '<name>=<path>'");
 		if let Some(_) = s.next() {
 			panic!("ERROR: Free arguments should be of the form '<name>=<path>'");
 		}
-		let file = match ::std::old_io::File::open(&::std::path::Path::new(path)) {
+		let file = match ::std::fs::File::open(&path) {
 			Ok(x) => x,
 			Err(e) => panic!("ERROR: Unable to open file '{}' for reading. Reason: {}", path, e)
 			};
-		(String::from_str(ident), file)
+		(String::from(ident), file)
 		}).collect();
 	
 	// ------------------------------------------------------------
@@ -105,18 +122,17 @@ fn main()
 	debug!("TOTALS:");
 	debug!(" Pass Count = {}", pass_count);
 	debug!(" Instruction Count = {}", disasm.instr_count());
-	let mut stdout = WriterWrapper(::std::old_io::stdout());
 	
-	let _ = disasm.dump( &mut stdout );
+	let _ = disasm.dump( &mut WriterWrapper(::std::io::stdout()) );
 }
 
-struct WriterWrapper<T:Writer>(T);
+struct WriterWrapper<T: ::std::io::Write>(T);
 
-impl<T:Writer> ::std::fmt::Writer for WriterWrapper<T>
+impl<T: ::std::io::Write> ::std::fmt::Write for WriterWrapper<T>
 {
 	fn write_str(&mut self, bytes: &str) -> ::std::fmt::Result
 	{
-		match self.0.write_str(bytes)
+		match self.0.write(bytes.as_bytes())
 		{
 		Ok(_) => Ok( () ),
 		Err(_) => Err( ::std::fmt::Error ),

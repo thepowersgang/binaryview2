@@ -9,7 +9,7 @@ use disasm::state::StateData;
 use disasm::instruction::Instruction;
 use disasm::{CodePtr,CodeRange};
 use std::default::Default;
-use std::collections::BitvSet;
+use bit_set::BitSet;
 
 pub type BlockRef = Rc<RefCell<Block>>;
 
@@ -23,7 +23,7 @@ pub struct Block
 }
 
 /// Function calling convention state
-#[derive(Debug,Copy,PartialEq)]
+#[derive(Debug,Copy,Clone,PartialEq)]
 pub enum CCState
 {
 	Unknown,
@@ -39,8 +39,8 @@ pub struct Function
 	name: String,
 	/// How correct the inputs/clobbers values are
 	populate_state: CCState,
-	inputs: BitvSet,
-	clobbers: BitvSet,
+	inputs: BitSet,
+	clobbers: BitSet,
 }
 
 impl Block
@@ -72,7 +72,14 @@ impl Block
 			Err(_) => panic!("Address {} not in block ({})", addr, self.range()),
 			};
 		trace!("splitting at {}, pos = {}", addr, i);
-		let new_instrs = self.instructions.split_off(i);
+		
+		//let new_instrs = self.instructions.split_off(i);
+		let mut new_instrs = Vec::new();
+		for _ in i .. self.instructions.len() {
+			new_instrs.push( self.instructions.pop().unwrap() );
+		}
+		new_instrs.reverse();
+
 		
 		// Forget state if the block was split
 		self.endstate = None;
@@ -84,10 +91,10 @@ impl Block
 	}
 	
 	pub fn instrs(&self) -> &[Instruction] {
-		&self.instructions[]
+		&self.instructions
 	}
 	pub fn refs(&self) -> &[CodePtr] {
-		&self.refs[]
+		&self.refs
 	}
 	
 	pub fn range(&self) -> ::disasm::CodeRange {
@@ -128,7 +135,7 @@ impl Default for CCState
 
 impl Function
 {
-	pub fn set_reg_usage(&mut self, fully_known: bool, inputs: BitvSet, clobbers: BitvSet)
+	pub fn set_reg_usage(&mut self, fully_known: bool, inputs: BitSet, clobbers: BitSet)
 	{
 		debug!("Function::set_reg_usage(fully_known={}, inputs={:?}, clobbers={:?}", fully_known, inputs, clobbers);
 		self.populate_state = if fully_known { CCState::Full } else { CCState::Partial };
@@ -139,10 +146,10 @@ impl Function
 	pub fn cc_state(&self) -> CCState {
 		self.populate_state
 	}
-	pub fn inputs(&self) -> &BitvSet {
+	pub fn inputs(&self) -> &BitSet {
 		&self.inputs
 	}
-	pub fn clobbers(&self) -> &BitvSet {
+	pub fn clobbers(&self) -> &BitSet {
 		&self.clobbers
 	}
 }

@@ -14,7 +14,7 @@ pub trait UCodeOp
 macro_rules! def_ucode{
 	($name:ident, $class:ident, ($st:ident, $sz:ident, $p:ident) => {$fwd:block; $back:block;})
 	=> {
-		struct $class;
+		pub struct $class;
 		pub static $name: $class = $class;
 		impl UCodeOp for $class
 		{

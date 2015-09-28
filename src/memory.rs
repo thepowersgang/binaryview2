@@ -3,6 +3,7 @@
 //
 use value::Value;
 use std::cmp::Ordering;
+use std::io::{Read,Seek};
 
 /// Memory region type
 enum RegionType
@@ -101,11 +102,10 @@ impl MemoryState
 	}
 	
 	/// Load fixed memory from a file
-	pub fn add_rom(&mut self, base: u64, size: usize, file: &mut ::std::old_io::File)
+	pub fn add_rom(&mut self, base: u64, size: usize, file: &mut ::std::fs::File)
 	{
 		// The ROM repeats as many times as nessesary to reach the stated size
-		file.seek(0, ::std::old_io::SeekEnd).unwrap();
-		let filesize = file.tell().unwrap();
+		let filesize = file.metadata().unwrap().len();
 		
 		// 1. 'filesize' must be a divisor of 'size'
 		if size as u64 / filesize * filesize != size as u64 {
@@ -114,8 +114,10 @@ impl MemoryState
 		
 		// 2. Load data!
 		// - Wrapping is handled in Region::read()
-		file.seek(0, ::std::old_io::SeekSet).unwrap();
-		self.add_region(base, size, RegionType::ROM(file.read_to_end().unwrap()));
+		file.seek( ::std::io::SeekFrom::Start(0) ).unwrap();
+		let mut data = Vec::new();
+		file.read_to_end(&mut data).unwrap();
+		self.add_region(base, size, RegionType::ROM(data));
 		debug!("Add ROM {:#x}+{:#x}", base, size);
 	}
 	pub fn add_ram(&mut self, base: u64, size: usize)
@@ -125,7 +127,7 @@ impl MemoryState
 	}
 	pub fn add_mmio(&mut self, base: u64, size: usize, class: &str)
 	{
-		self.add_region(base, size, RegionType::MMIO(String::from_str(class)));
+		self.add_region(base, size, RegionType::MMIO(String::from(class)));
 		debug!("Add MMIO {:#x}+{:#x} \"{}\"", base, size, class);
 	}
 	

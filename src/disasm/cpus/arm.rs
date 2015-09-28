@@ -19,15 +19,16 @@ impl BitExtractor for u16 {
 	}
 }
 
-struct ArmCpu;
+pub struct ArmCpu;
 
+pub static CPU_STRUCT: ArmCpu = ArmCpu;
+
+#[allow(non_snake_case)]
 mod SReg
 {
 	pub const CPSR: u8 = 0;
 	//pub const SPSR: u8 = 1;
 }
-
-pub static CPU_STRUCT: ArmCpu = ArmCpu;
 
 impl ::disasm::CPU for ArmCpu
 {
@@ -685,7 +686,7 @@ mod instrs
 		{ false };
 		{
 			let mask = p[0].immediate();
-			for i in range(0,16) {
+			for i in (0 .. 16) {
 				if mask & 1 << i != 0 {
 					try!(write!(f, "R{} ", i));
 				}
@@ -695,7 +696,7 @@ mod instrs
 		{
 			let mask = p[0].immediate();
 			debug!("mask={:x}", mask);
-			for i in range(0,16).rev() {
+			for i in (0 .. 16).rev() {
 				if mask & 1 << i != 0 {
 					// TODO: Decrement stack pointer
 					let val = state.get( InstrParam::TrueReg(i as u8) );
@@ -718,7 +719,7 @@ mod instrs
 		};
 		{
 			let mask = p[0].immediate();
-			for i in range(0,16) {
+			for i in (0 .. 16) {
 				if mask & 1 << i != 0 {
 					try!(write!(f, "R{} ", i));
 				}
@@ -728,7 +729,7 @@ mod instrs
 		{
 			let mask = p[0].immediate();
 			debug!("mask={:x}", mask);
-			for i in range(0,16) {
+			for i in (0 .. 16) {
 				if mask & 1 << i != 0 {
 					// TODO: Decrement stack pointer
 					let val = state.stack_pop();
@@ -748,7 +749,7 @@ mod instrs
 		{
 			try!( write!(f, "{:?}", p[0]) );
 			let mask = p[1].immediate();
-			for i in range(0,16) {
+			for i in (0 .. 16) {
 				if mask & 1 << i != 0 {
 					try!(write!(f, "R{} ", i));
 				}
@@ -759,7 +760,7 @@ mod instrs
 			let mut addr = state.get(p[0]);
 			let mask = p[1].immediate();
 			debug!("mask={:x}", mask);
-			for i in range(0,16).rev() {
+			for i in (0 .. 16).rev() {
 				if mask & 1 << i != 0 {
 					let val = state.get( InstrParam::TrueReg(i as u8) );
 					state.write(&addr, val);
@@ -781,7 +782,7 @@ mod instrs
 		{
 			try!( write!(f, "{:?}", p[0]) );
 			let mask = p[1].immediate();
-			for i in range(0,16) {
+			for i in (0 .. 16) {
 				if mask & 1 << i != 0 {
 					try!(write!(f, "R{} ", i));
 				}
@@ -792,7 +793,7 @@ mod instrs
 			let mut addr = state.get(p[0]);
 			let mask = p[1].immediate();
 			debug!("mask={:x}", mask);
-			for i in range(0,16).rev() {
+			for i in (0 .. 16).rev() {
 				if mask & 1 << i != 0 {
 					let val = state.read(&addr);
 					state.set( InstrParam::TrueReg(i as u8), val );

@@ -12,7 +12,7 @@ use value::{Value,ValueBool,ValueType};
 macro_rules! def_instr{
 	($name:ident, $class:ident, ($fmt:ident, $instr:ident, $params:ident, $state:ident) => {$isterm:block; $print:block;$forwards:block;$backwards:block;} )
 	=> {
-	struct $class;
+	pub struct $class;
 	pub static $name: $class = $class;
 	impl ::disasm::instruction::InstructionClass for $class
 	{

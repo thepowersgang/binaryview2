@@ -5,9 +5,8 @@
 // - Common lexer used for config files
 //
 // TODO: Make this even more generic, using a syntax extension to provide format description
-extern crate libc;
-
 pub use self::Token::*;
+use std::io::prelude::*;
 
 #[derive(Debug)]
 pub enum Token
@@ -26,19 +25,27 @@ pub enum Token
 	TokLineComment(String),
 }
 
-type LexResult<T> = Result<T,()>;
+#[derive(Debug)]
+struct LexError;
+impl_from! {
+	From<::std::io::Error>(_v) for LexError {
+		LexError
+	}
+}
+
+type LexResult<T> = Result<T,LexError>;
 
 /// Core lexer type
 pub struct Lexer<'r>
 {
-	instream: &'r mut (Buffer+'r),
+	instream: &'r mut (Read+'r),
 	lastc: Option<char>,
 	saved_tok: Option<Token>,
 }
 
 impl<'a> Lexer<'a>
 {
-	pub fn new<'r>(instream: &'r mut (Buffer+'r)) -> Lexer<'r> {
+	pub fn new<'r>(instream: &'r mut Read) -> Lexer<'r> {
 		Lexer {
 			instream: instream,
 			lastc: None,
@@ -76,14 +83,17 @@ impl<'a> Lexer<'a>
 			self.lastc = None;
 			Ok( x )
 			},
-		None => match self.instream.read_char()
-			{
-			Ok(x) => Ok( x ),
-			Err(e) => match e.kind
-				{
-				::std::old_io::EndOfFile => Ok( '\0' ),
-				_ => Err( () )
-				},
+		None => {
+			let mut b = [0];
+			if try!(self.instream.read(&mut b)) == 0 {
+				Ok('\0')
+			}
+			else if b[0] >= 128 {
+				panic!("TODO: Handdle UTF-8");
+			}
+			else {
+				Ok( b[0] as char )
+			}
 			},
 		}
 	}
@@ -157,7 +167,7 @@ impl<'a> Lexer<'a>
 		loop
 		{
 			let ch = try!(self.getc());
-			match ch.to_digit(base as usize) {
+			match ch.to_digit(base as u32) {
 			Some(d) => {
 				val *= base;
 				val += d as u64
@@ -220,7 +230,7 @@ impl<'a> Lexer<'a>
 			},
 		_ => {
 			error!("Bad character #{} '{}' hit", ch as u32, ch);
-			return Err( () )
+			return Err( LexError )
 			}
 		};
 		
@@ -231,14 +241,10 @@ impl<'a> Lexer<'a>
 }
 
 fn isspace(ch: char) -> bool {
-	unsafe {
-		return libc::funcs::c95::ctype::isspace(ch as i32) != 0
-	}
+	ch.is_whitespace()
 }
 fn isalnum(ch: char) -> bool {
-	unsafe {
-		return libc::funcs::c95::ctype::isalnum(ch as i32) != 0
-	}
+	ch.is_alphanumeric()
 }
 
 // vim: ft=rust

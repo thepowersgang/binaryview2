@@ -6,16 +6,21 @@
 //
 // A core type to BinaryView, this represents a register value during execution and a possible value
 // for RAM.
-use std::num::{Int,UnsignedInt,NumCast};
+use num::{Zero,One,NumCast};
 use std::fmt::LowerHex;
 use std::cmp::Ordering;
 
 /// Trait for valid values in a value (only implemented for unsigned sized integers)
-pub trait ValueType : UnsignedInt + LowerHex { }
-impl ValueType for u8 {}
-impl ValueType for u16 {}
-impl ValueType for u32 {}
-impl ValueType for u64 {}
+pub trait ValueType : ::num::PrimInt + LowerHex {
+}
+impl ValueType for u8 {
+}
+impl ValueType for u16 {
+}
+impl ValueType for u32 {
+}
+impl ValueType for u64 {
+}
 
 /// A dynamic value (range determined during execution)
 #[derive(Clone)]
@@ -44,7 +49,9 @@ pub enum ValueBool
 	Unknown,
 }
 
-struct ValuePossibilities<'a,T:ValueType+'static>
+struct ValuePossibilities<'a,T:ValueType+'a>
+where
+	<T as ::num::traits::Num>::FromStrRadixErr: 'a
 {
 	val: &'a Value<T>,
 	idx: usize,
@@ -65,7 +72,7 @@ impl<T: ValueType> Value<T>
 	}
 	/// Fully known zero (shortcut)
 	pub fn zero() -> Value<T> {
-		Value::Known( Int::zero() )
+		Value::Known( Zero::zero() )
 	}
 	/// Fully known negative one (shortcut)
 	pub fn ones() -> Value<T> {
@@ -77,7 +84,7 @@ impl<T: ValueType> Value<T>
 	//}
 	
 	fn ones_raw() -> T {
-		Int::max_value()
+		T::max_value()
 	}
 	
 	fn _bitsize() -> usize {
@@ -97,13 +104,12 @@ impl<T: ValueType> Value<T>
 		match NumCast::from(val & mask)
 		{
 		Some(v) => v,
-		None => unsafe {
-			panic!("Unable to cast {:#x} from {} to {}",
+		None =>
+			panic!("Unable to cast {:#x} from u{} to u{}",
 				val,
-				(*::std::intrinsics::get_tydesc::<U>()).name,
-				(*::std::intrinsics::get_tydesc::<T>()).name
-				);
-			},
+				U::zero().leading_zeros(), //::std::intrinsics::type_name::<U>(),
+				T::zero().leading_zeros() //::std::intrinsics::type_name::<T>()
+				),
 		}
 	}
 	
@@ -184,14 +190,14 @@ impl<T: ValueType> Value<T>
 	/// Fetch the value of the specified bit
 	pub fn bit(&self, pos: usize) -> ValueBool
 	{
-		let one: T = Int::one();
+		let one: T = One::one();
 		let mask = one << pos;
 		match self
 		{
 		&Value::Input(_) => ValueBool::Unknown,
 		&Value::Unknown => ValueBool::Unknown,
 		&Value::Known(v) =>
-			if v & mask != Int::zero() {
+			if v & mask != Zero::zero() {
 				ValueBool::True
 			}
 			else {
@@ -211,12 +217,12 @@ impl<T: ValueType> ::std::ops::Add for Value<T>
 	fn add(self, other: Value<T>) -> Value<T>
 	{
 		if let Some(v) = self.val_known() {
-			if v == Int::zero() {
+			if v == Zero::zero() {
 				return other;
 			}
 		}
 		if let Some(v) = other.val_known() {
-			if v == Int::zero() {
+			if v == Zero::zero() {
 				return self;
 			}
 		}
@@ -237,7 +243,7 @@ impl<T: ValueType> ::std::ops::Sub for Value<T>
 	fn sub(self, other: Value<T>) -> Value<T>
 	{
 		if let Some(v) = other.val_known() {
-			if v == Int::zero() {
+			if v == Zero::zero() {
 				// - Subtracting nothing, pass value through unmolested
 				return self;
 			}
@@ -263,19 +269,19 @@ impl<T: ValueType> ::std::ops::Mul for Value<T>
 	{
 		// Known values - Handle zero and one
 		if let Some(v) = other.val_known() {
-			if v == Int::zero() {
+			if v == Zero::zero() {
 				return (Value::zero(), Value::zero());
 			}
-			if v == Int::one() {
+			if v == One::one() {
 				return (Value::zero(), self);
 			}
 		}
 		// Known values - Handle zero and one
 		if let Some(v) = self.val_known() {
-			if v == Int::zero() {
+			if v == Zero::zero() {
 				return (Value::zero(), Value::zero());
 			}
-			if v == Int::one() {
+			if v == One::one() {
 				return (Value::zero(), other);
 			}
 		}
@@ -306,8 +312,8 @@ impl<T: ValueType> ::std::ops::BitAnd for Value<T>
 		match (self, other)
 		{
 		// - Zero nukes result
-		(_,Value::Known(v)) if v == Int::zero() => Value::zero(),
-		(Value::Known(v),_) if v == Int::zero() => Value::zero(),
+		(_,Value::Known(v)) if v == Zero::zero() => Value::zero(),
+		(Value::Known(v),_) if v == Zero::zero() => Value::zero(),
 		// - Pure unkown poisons
 		(Value::Unknown,_) => Value::Unknown,
 		(_,Value::Unknown) => Value::Unknown,
@@ -462,7 +468,9 @@ impl<T: ValueType> ::std::fmt::Debug for Value<T>
 	}
 }
 
-impl<'a,T: ValueType> Iterator for ValuePossibilities<'a,T>
+impl<'a,T: ValueType+'a> Iterator for ValuePossibilities<'a,T>
+where
+	<T as ::num::traits::Num>::FromStrRadixErr: 'a
 {
 	type Item = T;
 	fn next(&mut self) -> Option<T>

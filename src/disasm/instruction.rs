@@ -24,7 +24,7 @@ pub struct Instruction
 }
 
 /// Instruction parameter
-#[derive(PartialEq,Copy)]
+#[derive(PartialEq,Copy,Clone)]
 pub enum InstrParam
 {
 	TrueReg(u8),
@@ -32,7 +32,7 @@ pub enum InstrParam
 	Immediate(u64),
 }
 /// Instruction size
-#[derive(PartialEq,Copy)]
+#[derive(PartialEq,Copy,Clone)]
 pub enum InstrSize
 {
 	SizeNA,
@@ -95,7 +95,7 @@ impl Instruction
 		self.ip.addr() <= addr && addr < self.ip.addr() + self.len as u64
 	}
 	pub fn is_terminal(&self) -> bool {
-		self.condition == COND_ALWAYS && self.class.is_terminal(self.params.as_slice())
+		self.condition == COND_ALWAYS && self.class.is_terminal(&self.params)
 	}
 	pub fn is_conditional(&self) -> bool {
 		self.condition != COND_ALWAYS
@@ -104,7 +104,7 @@ impl Instruction
 	pub fn addr(&self) -> CodePtr { self.ip }
 	pub fn mode(&self) -> super::CPUMode { self.ip.mode() }
 	pub fn opsize(&self) -> InstrSize { self.opsize }
-	pub fn params(&self) -> &[InstrParam] { self.params.as_slice() }
+	pub fn params(&self) -> &[InstrParam] { &self.params }
 }
 
 impl ::std::fmt::Debug for Instruction
@@ -113,7 +113,7 @@ impl ::std::fmt::Debug for Instruction
 	{
 		try!( write!(f, "[{:?}]+{} ", self.ip, self.len) );
 		try!( write!(f, "{{{:?}}}:{:x} {} ", self.opsize, self.condition, self.class.name()) );
-		try!( self.class.print(f, self.params.as_slice()) );
+		try!( self.class.print(f, &self.params) );
 		Ok( () )
 	}
 }
@@ -124,7 +124,7 @@ impl ::std::fmt::Display for Instruction
 	{
 		try!( write!(f, "[{}+{}] ", self.ip, self.len) );
 		try!( write!(f, "{{{:?}}}:{:x} {} ", self.opsize, self.condition, self.class.name()) );
-		try!( self.class.print(f, self.params.as_slice()) );
+		try!( self.class.print(f, &self.params) );
 		Ok( () )
 	}
 }

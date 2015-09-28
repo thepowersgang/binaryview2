@@ -5,12 +5,12 @@ use value::{Value,ValueBool,ValueType};
 use memory::MemoryStateAccess;
 use disasm::instruction::InstrParam;
 use disasm::CodePtr;
-use std::collections::BitvSet;
+use bit_set::BitSet;
 use std::default::Default;
 
 const NUM_TMPREGS: usize = 4;
 
-type CallHandler<'call> = &'call mut (FnMut(&mut State, CodePtr)->() + 'call);
+pub type CallHandler<'call> = &'call mut (FnMut(&mut State, CodePtr)->() + 'call);
 
 /// Emulated CPU state during pseudo-execution
 pub struct State<'mem,'call>
@@ -46,9 +46,9 @@ pub enum RunMode
 pub struct StateData
 {
 	/// Markers indicating that the specified register was read before being written
-	inputs: BitvSet,
+	inputs: BitSet,
 	/// Helper for maintaining `inputs`
-	writtens: BitvSet,
+	writtens: BitSet,
 	
 	/// Real registers - Static vector
 	registers: Vec<Value<u64>>,
@@ -114,7 +114,7 @@ impl<'mem,'call> State<'mem,'call>
 
 	/// Retrive the contents of the todo list
 	pub fn todo_list(&self) -> &[(CodePtr,bool)] {
-		self.todo_list.as_slice()
+		&self.todo_list
 	}
 	pub fn clear_todo_list(&mut self) {
 		self.todo_list.clear()
@@ -311,13 +311,13 @@ impl StateData
 		}
 	}
 	
-	pub fn get_inputs(&self) -> BitvSet
+	pub fn get_inputs(&self) -> BitSet
 	{
 		self.inputs.clone()
 	}
-	pub fn get_clobbers(&self) -> BitvSet
+	pub fn get_clobbers(&self) -> BitSet
 	{
-		let mut ret = BitvSet::with_capacity(self.registers.len());
+		let mut ret = BitSet::with_capacity(self.registers.len());
 		for (i,reg) in self.registers.iter().enumerate()
 		{
 			if *reg != Value::Input(i as u8)

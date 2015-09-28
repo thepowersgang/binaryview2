@@ -5,8 +5,9 @@
 // - Disassembly core
 use self::state::{State,RunMode};
 use self::block::Block;
-use sortedlist::SortedList;	// Allows treating of collection types as sorted lists
+//use sortedlist::SortedList;	// Allows treating of collection types as sorted lists
 use std::collections::{HashSet,HashMap};
+use bit_set::BitSet;
 use std::default::Default;
 use value::Value;
 
@@ -24,7 +25,7 @@ pub struct CodePtr(CPUMode, u64);
 #[derive(Copy,PartialEq,Eq,Clone,Hash)]
 pub struct CodeRange(CodePtr, CodePtr);
 
-trait CPU
+pub trait CPU
 {
 	/// Return the number of CPU-defined registers
 	fn num_regs(&self) -> u16;
@@ -72,7 +73,7 @@ impl<'a> Disassembled<'a>
 	}
 	
 	// TODO: Should this be moved to being Debug or Display?
-	pub fn dump(&self, f: &mut ::std::fmt::Writer) -> ::std::fmt::Result
+	pub fn dump(&self, f: &mut ::std::fmt::Write) -> ::std::fmt::Result
 	{
 		for block in self.blocks.iter()
 		{
@@ -147,6 +148,7 @@ impl<'a> Disassembled<'a>
 						was_jump = true;
 					}
 				}
+				assert!(was_jump);
 			}
 			
 			count += 1;
@@ -159,7 +161,7 @@ impl<'a> Disassembled<'a>
 	/// Run a single function, determining what registers it uses and clobbers
 	///
 	/// Returns (will_be_fully_known, clobbers, inputs)
-	fn pass_callingconv_runfcn(&self, addr: CodePtr) -> (bool, ::std::collections::BitvSet, ::std::collections::BitvSet)
+	fn pass_callingconv_runfcn(&self, addr: CodePtr) -> (bool, BitSet, BitSet)
 	{
 		let mut end_states = Vec::new();
 		let mut will_be_fully_known = true;	// cleared if non-fully-known method is called
@@ -167,7 +169,7 @@ impl<'a> Disassembled<'a>
 		// Open scope to properly end the borrows owned by callee_lookup
 		{
 			// A closure called by State::call() that handles the calling convention
-			let mut callee_lookup = |&mut: state: &mut state::State, tgt_addr: CodePtr| {
+			let mut callee_lookup = |state: &mut state::State, tgt_addr: CodePtr| {
 				trace!("callee_lookup(tgt_addr={}), addr={}", tgt_addr, addr);
 				if tgt_addr == addr {
 					warn!("TODO: Handle direct recursion");
@@ -265,7 +267,7 @@ impl<'a> Disassembled<'a>
 					let mut newhist = history;
 					newhist.push(block_idx);
 					let data = state.unwrap_data();
-					for &addr in refs.init()	// all but last
+					for &addr in &refs[..refs.len()-1]	// all but last
 					{
 						let next_block_idx = self.find_block_for(addr).ok().expect("Target block isn't disassembled");
 						if newhist.contains(&next_block_idx)
@@ -290,8 +292,8 @@ impl<'a> Disassembled<'a>
 		}
 		// Collate end states
 		debug!("end_states = {:?}", end_states);
-		let mut clobbers = ::std::collections::BitvSet::new();
-		let mut inputs = ::std::collections::BitvSet::new();
+		let mut clobbers = BitSet::default();
+		let mut inputs = BitSet::default();
 		for sd in end_states
 		{
 			trace!("Clobbers: {:?} |= {:?}", clobbers, sd.get_clobbers());
@@ -312,9 +314,9 @@ impl<'a> Disassembled<'a>
 		// NOTE: pass_callingconv_runfcn requires access to self.method_list, so we can't lock it
 		for addr in self.method_list.keys().map(|x| *x).collect::<Vec<_>>()
 		{
-			debug!("Method {}: info={:?}", addr, self.method_list[addr]);
+			debug!("Method {}: info={:?}", addr, self.method_list[&addr]);
 			
-			let start_state = self.method_list[addr].cc_state();
+			let start_state = self.method_list[&addr].cc_state();
 			
 			// Return if cc_state is Full
 			if start_state == block::CCState::Full {
@@ -324,10 +326,10 @@ impl<'a> Disassembled<'a>
 			
 	
 			let (fully_known, clobbers, inputs) = self.pass_callingconv_runfcn(addr);
-			self.method_list[addr].set_reg_usage(fully_known, inputs, clobbers);
+			self.method_list.get_mut(&addr).unwrap().set_reg_usage(fully_known, inputs, clobbers);
 			
 			// Only increment count if the state changed
-			let new_state = self.method_list[addr].cc_state();
+			let new_state = self.method_list[&addr].cc_state();
 			if new_state != start_state
 			{
 				assert!(new_state != block::CCState::Unknown);
@@ -356,14 +358,14 @@ impl<'a> Disassembled<'a>
 			{
 				debug!("- {} already converted, stored in block '{}', breaking", ip, range);
 				
-				let newblock = box self.blocks[i].split_at(ip);
+				let newblock = Box::new( self.blocks[i].split_at(ip) );
 				self.blocks.insert(i+1, newblock);
 			}
 			return ;
 		}
 		
 		// Actual disassembly call
-		let block = box self.convert_block(ip, &mut todo);
+		let block = Box::new( self.convert_block(ip, &mut todo) );
 		let i = match self.find_block_for(block.range().first())
 			{
 			Err(i) => i,
@@ -396,7 +398,7 @@ impl<'a> Disassembled<'a>
 				}
 				else {
 					assert!( self.blocks[i].range().contains(item) );
-					let newblock = box self.blocks[i].split_at(item);
+					let newblock = Box::new( self.blocks[i].split_at(item) );
 					self.blocks.insert(i+1, newblock);
 				}
 				},

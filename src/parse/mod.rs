@@ -26,14 +26,14 @@ pub fn parse_memorymap(
 	memory: &mut ::memory::MemoryState,
 	//symbols: &mut ::symbols::Symbols,
 	typemap: &::types::TypeMap,
-	infiles: &mut ::std::collections::HashMap<String,::std::old_io::File>,
+	infiles: &mut ::std::collections::HashMap<String,::std::fs::File>,
 	path: &str
 	)
 	-> Result<(Vec<CodePtr>,),String>
 {
 	let mut entrypoints = Vec::new();
-	let fp = ::std::old_io::File::open(&::std::path::Path::new(path)).unwrap();
-	let mut reader = ::std::old_io::BufferedReader::new(fp);
+	let fp = ::std::fs::File::open(path).unwrap();
+	let mut reader = ::std::io::BufReader::new(fp);
 	let mut lex = lexer::Lexer::new( &mut reader );
 	
 	// read symbol, select action
@@ -143,8 +143,7 @@ pub fn parse_memorymap(
 
 pub fn parse_typemap(typemap: &mut ::types::TypeMap, path: &str) -> Result<(),String>
 {
-	let fp = ::std::old_io::File::open(&::std::path::Path::new(path)).unwrap();
-	let mut reader = ::std::old_io::BufferedReader::new(fp);
+	let mut reader = ::std::fs::File::open(path).unwrap();
 	let mut lex = lexer::Lexer::new( &mut reader );
 	
 	loop

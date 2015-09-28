@@ -4,7 +4,7 @@
 use value::Value;
 use disasm::instruction::Instruction;
 
-struct Intel32CPU;
+pub struct Intel32CPU;
 
 pub static CPU_STRUCT: Intel32CPU = Intel32CPU;
 

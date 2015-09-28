@@ -44,7 +44,7 @@ impl TypeMap
 	pub fn new_struct(&mut self, name: &str) -> Result<&mut Struct,()>
 	{
 		use std::collections::hash_map::Entry;
-		match self.structs.entry(String::from_str(name))
+		match self.structs.entry(String::from(name))
 		{
 		Entry::Occupied(_) => Err( () ),
 		Entry::Vacant(e) => Ok( e.insert( Struct::new() ) ),
@@ -66,7 +66,7 @@ impl TypeMap
 		_ => {
 			match self.structs.get(name)
 			{
-			Some(_) => Ok( InnerType::Struct( String::from_str(name) ) ),
+			Some(_) => Ok( InnerType::Struct( String::from(name) ) ),
 			None => Err( () ),
 			}
 			}
