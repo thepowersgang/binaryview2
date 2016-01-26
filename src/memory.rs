@@ -26,7 +26,8 @@ pub struct MemoryState
 	regions: Vec<Region>,
 }
 
-pub trait MemoryStateAccess
+pub trait MemoryStateAccess:
+	::value::ValueType
 {
 	fn read(&MemoryState, addr: u64) -> Option<Value<Self>>;
 	fn write(&mut MemoryState, addr: u64, val: Value<Self>);

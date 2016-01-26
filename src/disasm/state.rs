@@ -331,7 +331,7 @@ impl StateData
 	pub fn read_reg(&mut self, idx: u8) -> Value<u64>
 	{
 		assert!( (idx as usize) < self.registers.len(), "Register index out of range");
-		if ! self.writtens.contains(&(idx as usize))
+		if ! self.writtens.contains(idx as usize)
 		{
 			self.inputs.insert( idx as usize );
 		}
